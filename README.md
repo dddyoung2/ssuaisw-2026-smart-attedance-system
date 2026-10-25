@@ -1,4 +1,4 @@
-# ssuaisw-2026-opensource08
+# FR-based Smart Attedance System
 
 > 오픈소스기반기초설계 수업 프로젝트
 
@@ -6,9 +6,8 @@
 
 ## 개요
 
-- **프로젝트명:** 미정
-- **목적:** 깃과 깃허브를 활용하여 프로젝트를 설계하며, 이를 통해 오픈소스 기술을 숙달하는 것
-- **핵심 기능 요약:** 
+- **목적:** 기존 공개된 얼굴인식 및 분류 오픈소스를 정확도를 보다 개선하여 실제 출석에 활용할 수 있는 스마트 출석 시스템을 개발하는 것
+- **핵심 기능 요약:** 얼굴인식 -> 데이터베이스에 있는 출석 대상자들과 대조 -> 출석 여부 반영
 
 ---
 
@@ -22,8 +21,7 @@
 ---
 
 ## 시스템 아키텍처
-
-<!-- 아키텍처 다이어그램 이미지 삽입 -->
+<img width="2212" height="1438" alt="image" src="https://github.com/user-attachments/assets/b8085246-d59c-4a75-9659-9dc088505531" />
 
 ---
 
@@ -36,7 +34,8 @@
 - 
 
 **AI / 모델**
-- 
+- Face Detection Model
+- Face Recognition
 
 **Database / Infra**
 - 
@@ -56,9 +55,9 @@ project/
 ### 저장소 클론
 
 ``` bash
-git clone https://github.com/dddyoung2/ssuaisw-2026-opensource08.git
+git clone https://github.com/dddyoung2/ssuaisw-2026-smart-attedance-system.git
 
-cd {repo}
+cd ssuaisw-2026-smart-attedance-system
 ```
 
 ### 의존성 설치
