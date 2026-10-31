@@ -42,11 +42,17 @@
 
 ---
 
-## 폴더 구조
+## 프로젝트 구조
 ```
-project/
-├── CONTRIBUTING.md/           # 규칙 문서
-└── README.md                  # 프로젝트 소개 문서
+ssuaisw-2026-smart-attedance-system/
+│  .gitignore
+│  CONTRIBUTING.md                    # 규칙 문서
+│  README.md                          # 프로젝트 소개 문서
+├─.github                             # GitHub 설정 및 자동화
+│  │  pull_request_template.md        # PR 템플릿
+│  └─workflows
+├─docs                                # 프로젝트 관련 문서 파일
+└─src                                 # 프로그램 코드    
 ```
 ---
 
