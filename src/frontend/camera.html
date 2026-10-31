@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>카메라 출결</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="js/camera.js" defer></script>
+</head>
+<body>
+  <main class="page">
+    <div class="top-bar">
+      <a href="index.html">← 뒤로</a>
+      <a href="attendance.html">출결 현황 보기</a>
+    </div>
+
+    <!-- 강의실 선택 -->
+    <section class="room-select">
+      <div class="room-head">
+        <div>
+          <div class="label" id="roomLabel">기본 · 배정 강의실</div>
+          <div class="value" id="roomValue">공학관 3층 301호</div>
+        </div>
+        <button class="btn" type="button" id="roomBtn" aria-expanded="false">강의실 선택</button>
+      </div>
+
+      <div class="room-panel" id="roomPanel">
+        <div class="fields">
+          <div>
+            <label for="building">건물</label>
+            <select id="building">
+              <option>공학관</option>
+              <option>인문관</option>
+              <option>과학관</option>
+              <option>경영관</option>
+            </select>
+          </div>
+          <div>
+            <label for="floor">층</label>
+            <select id="floor"></select>
+          </div>
+          <div>
+            <label for="room">강의실</label>
+            <select id="room"></select>
+          </div>
+        </div>
+        <button class="btn full" type="button" id="applyRoom">이 강의실 카메라로 연결</button>
+      </div>
+    </section>
+
+    <!-- 카메라 화면 -->
+    <div class="camera-box">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="camera-msg" id="cameraMsg">카메라 연결 중…</div>
+      <span class="rec-badge" id="recBadge">촬영 중</span>
+      <div class="flash" id="flash"></div>
+    </div>
+
+    <button class="btn full" type="button" id="shootBtn">촬영 시작</button>
+    <p class="shoot-info" id="shootInfo">촬영을 시작하면 10초마다 자동으로 사진이 저장돼요.</p>
+
+    <canvas id="canvas" width="640" height="480" hidden></canvas>
+  </main>
+</body>
+</html>
