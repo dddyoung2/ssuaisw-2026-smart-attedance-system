@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>출결 현황</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="js/attendance.js" defer></script>
+</head>
+<body>
+  <main class="page wide">
+    <div class="top-bar">
+      <a href="camera.html">← 카메라로</a>
+      <span class="sub" id="today"></span>
+    </div>
+
+    <!-- 위: 출결 현황 -->
+    <section>
+      <h2>출결 현황</h2>
+      <div class="summary">
+        <div><strong id="total">0</strong><span>전체</span></div>
+        <div><strong id="presentCnt">0</strong><span>출석</span></div>
+        <div><strong id="absentCnt">0</strong><span>결석</span></div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>번호</th><th>학번</th><th>이름</th><th class="status">출결</th></tr>
+          </thead>
+          <tbody id="studentList"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 아래: 촬영된 사진 -->
+    <section>
+      <div class="section-head">
+        <h2>촬영된 사진</h2>
+        <button type="button" id="clearPhotos">사진 모두 지우기</button>
+      </div>
+      <div class="photo-grid" id="photoGrid"></div>
+    </section>
+  </main>
+</body>
+</html>

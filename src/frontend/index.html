@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>출결 방식 선택</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="js/index.js" defer></script>
+</head>
+<body>
+  <main class="page">
+    <h1>출결 방식 선택</h1>
+    <p class="sub">이번 수업의 출결 방식을 골라 주세요.</p>
+
+    <div class="mode-group">
+      <button class="btn outline" type="button" id="manualBtn">수동 출결</button>
+      <button class="btn" type="button" id="eBtn" aria-expanded="false" aria-controls="eOptions">전자 출결</button>
+    </div>
+
+    <!-- 전자 출결을 누르면 나타나는 3개 버튼 -->
+    <div class="sub-options" id="eOptions">
+      <button class="btn" type="button" id="qrBtn">
+        <span class="icon">▦</span>큐알
+      </button>
+      <button class="btn" type="button" id="codeBtn">
+        <span class="icon">#</span>코드
+      </button>
+      <a class="btn" href="camera.html">
+        <span class="icon">◉</span>카메라
+      </a>
+    </div>
+  </main>
+</body>
+</html>
