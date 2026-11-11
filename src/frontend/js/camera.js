@@ -2,7 +2,7 @@
 // (api.js 가 먼저 로드되어 있어야 함: API_BASE, api(), setCurrentSessionId())
 
 /* ---------- 설정 ---------- */
-const INTERVAL_SEC = 10;     // 자동 촬영 주기(초)
+const INTERVAL_SEC = 60;     // 자동 촬영 주기(초)
 const JPEG_QUALITY = 0.8;    // 얼굴 인식을 위해 0.6 → 0.8
 
 /* ---------- 요소 ---------- */
