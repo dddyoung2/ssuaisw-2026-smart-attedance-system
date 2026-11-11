@@ -15,3 +15,25 @@
 .venv/
 __pycache__/
 *.pyc
+
+# dataset: 사진·특징 벡터·라벨 전부 제외, 설명(README)만 추적
+dataset/*
+!dataset/README.md
+
+# 실험 로컬 전용
+src/exp/**/weights/
+src/exp/**/third_party/
+src/exp/**/results/predictions/
+src/exp/**/results/logs/
+.cache/
+
+# 모델·특징 벡터 파일
+*.pt
+*.pth
+*.onnx
+*.npy
+*.npz
+
+# 기타
+.DS_Store
+~$*
