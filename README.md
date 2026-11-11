@@ -15,8 +15,12 @@
 
 | 기능명 | 설명 |
 |---|---|
-| | |
-| | |
+| 강의실 사진 촬영 | 강의실 카메라로 수업 중 단체 사진을 촬영 |
+| 얼굴 탐지 | 단체 사진에서 학생 얼굴 위치를 찾음 |
+| 얼굴 인식 | 찾은 얼굴을 수강생 명단의 등록 사진과 대조 |
+| 출석 판정 | 한 장이라도 인식되면 출석, 학생별 출석 여부 표 생성 |
+| 교수 확인 | 인식되지 않은 학생은 "확인 필요"로 표시, 교수가 최종 확정 |
+| 사진 즉시 삭제 | 판정이 끝나면 원본 사진 삭제 |
 
 ---
 
@@ -28,17 +32,20 @@
 ## 기술 스택
 
 **Frontend**
-- 
+- HTML / CSS / JavaScript
 
 **Backend**
-- 
+- 미정
 
 **AI / 모델**
-- Face Detection Model
-- Face Recognition
+- Face Detection Model: 미정
+- Face Recognition: 미정
+- Python / PyTorch / OpenCV
+- Visualization
+    - matplotlib / seaborn
 
 **Database / Infra**
-- 
+- 미정
 
 ---
 
@@ -52,7 +59,11 @@ ssuaisw-2026-smart-attedance-system/
 │  │  pull_request_template.md        # PR 템플릿
 │  └─workflows
 ├─docs                                # 프로젝트 관련 문서 파일
-└─src                                 # 프로그램 코드    
+└─src
+   ├─frontend                         # 출결 화면
+   └─exp                              # 실험 코드
+      ├─face-detection                # 얼굴 탐지: 비교, 확정, 튜닝
+      └─face-recognition              # 얼굴 인식
 ```
 ---
 
