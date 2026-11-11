@@ -114,7 +114,9 @@ cd src
 python -m backend.scripts.recompute_embeddings
 ```
 
-## 아직 README 명세와 다른 점
+## 사진 보관 정책과 README 명세와 다른 점
 
-- **사진 즉시 삭제**: 지금은 판정 후에도 원본 사진을 보관합니다(교수 확인용 얼굴 이미지, 재계산에 사용).
+- **촬영 사진은 보관합니다** (README의 "사진 즉시 삭제"와 다름). 판정 후에도 원본 파일과 DB 기록(`session_photos`, `detections`)을 남겨,
+  교수 확인용 얼굴 이미지와 모델 교체 시 임베딩 재계산에 사용합니다. 출결 화면의 "사진 모두 지우기"(`DELETE /sessions/{id}/photos`)로만 삭제됩니다.
+- **사진과 DB는 각자 PC에만 저장됩니다.** `src/backend/data/`는 git에서 제외되므로, 저장소를 받은 팀원은 빈 DB로 시작하고 학생도 각자 등록해야 합니다.
 - **"확인 필요" 상태**: 지금은 present/absent 두 가지이고, 인식되지 않은 얼굴은 `GET /sessions/{id}/detections`에서 `matched_student_id: null`로 확인합니다.
