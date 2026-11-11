@@ -1,8 +1,9 @@
 // ===== 2페이지: 카메라 출결 =====
+// (api.js 가 먼저 로드되어 있어야 함: API_BASE, api(), setCurrentSessionId())
 
 /* ---------- 설정 ---------- */
-const INTERVAL_SEC = 10;   // 자동 촬영 주기(초)
-const MAX_PHOTOS = 20;     // 저장할 최대 사진 수
+const INTERVAL_SEC = 10;     // 자동 촬영 주기(초)
+const JPEG_QUALITY = 0.8;    // 얼굴 인식을 위해 0.6 → 0.8
 
 /* ---------- 요소 ---------- */
 const roomBtn = document.getElementById('roomBtn');
@@ -47,10 +48,12 @@ roomBtn.addEventListener('click', () => {
 });
 
 document.getElementById('applyRoom').addEventListener('click', () => {
+  if (timer) stopShooting();   // 촬영 중 강의실을 바꾸면 멈춤
   roomLabel.textContent = '선택한 강의실';
   roomValue.textContent = `${building.value} ${floor.value}층 ${room.value}호`;
   roomPanel.classList.remove('open');
   roomBtn.setAttribute('aria-expanded', false);
+  sessionId = null;            // 강의실이 바뀌면 다음 촬영 때 새 수업 회차 생성
   // 실제 서비스에서는 여기서 선택한 강의실의 카메라 스트림 주소로 바꿔 연결합니다.
   startCamera();
 });
@@ -73,56 +76,79 @@ async function startCamera() {
 
 startCamera();
 
-/* ---------- 주기적 촬영 ---------- */
+/* ---------- 수업 회차 ---------- */
+let sessionId = null;
+
+// 이 페이지에서 처음 촬영을 시작할 때(또는 강의실을 바꾼 뒤) 수업 회차를 만든다.
+async function ensureSession() {
+  if (sessionId) return sessionId;
+  const sess = await api('/sessions', { method: 'POST', json: { room: roomValue.textContent } });
+  sessionId = sess.session_id;
+  setCurrentSessionId(sessionId);
+  return sessionId;
+}
+
+/* ---------- 주기적 촬영 + 업로드 ---------- */
 let timer = null;
-let count = 0;
+let count = 0;          // 업로드 성공한 사진 수
+let lastResult = '';    // 마지막 인식 결과 문구
 
-function loadPhotos() {
-  try {
-    return JSON.parse(localStorage.getItem('photos')) || [];
-  } catch (e) {
-    return [];
-  }
+function updateInfo(extra) {
+  shootInfo.textContent =
+    `${count}장 업로드됨 · ${INTERVAL_SEC}초마다 자동 촬영 중` +
+    (lastResult ? ` · ${lastResult}` : '') +
+    (extra ? ` · ${extra}` : '');
 }
 
-function savePhotos(photos) {
-  try {
-    localStorage.setItem('photos', JSON.stringify(photos.slice(0, MAX_PHOTOS)));
-  } catch (e) {
-    console.warn('사진 저장 실패:', e);
-  }
+function canvasToBlob() {
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
 }
 
-function capture() {
-  if (!video.videoWidth) return;   // 카메라가 아직 준비 안 됨
+async function capture() {
+  if (!video.videoWidth || !sessionId) return;   // 카메라/세션이 아직 준비 안 됨
 
   const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const data = canvas.toDataURL('image/jpeg', 0.6);
-
-  const photos = loadPhotos();
-  photos.unshift({
-    time: new Date().toLocaleTimeString('ko-KR'),
-    room: roomValue.textContent,
-    data
-  });
-  savePhotos(photos);
-
-  count++;
-  shootInfo.textContent = `${count}장 촬영됨 · ${INTERVAL_SEC}초마다 자동 촬영 중`;
 
   // 찰칵 효과
   flash.classList.remove('go');
   void flash.offsetWidth;
   flash.classList.add('go');
+
+  const blob = await canvasToBlob();
+  if (!blob) return;
+  const form = new FormData();
+  form.append('photo', blob, 'capture.jpg');     // 파일명(확장자) 필수: 서버가 jpg/png 만 허용
+
+  updateInfo('업로드 중…');
+  try {
+    const data = await api(`/sessions/${sessionId}/photos`, { method: 'POST', form });
+    count++;
+    const s = data.attendance.summary;
+    lastResult = `얼굴 ${data.photo.face_count}명 인식, 출석 ${s.present}/${s.total}명`;
+    updateInfo();
+  } catch (e) {
+    updateInfo(`업로드 실패: ${e.message}`);
+  }
 }
 
-function startShooting() {
+async function startShooting() {
+  shootBtn.disabled = true;
+  try {
+    await ensureSession();
+  } catch (e) {
+    alert(`수업을 시작할 수 없어요.\n${e.message}`);
+    return;
+  } finally {
+    shootBtn.disabled = false;
+  }
+
   capture();                                   // 시작하자마자 1장
   timer = setInterval(capture, INTERVAL_SEC * 1000);
   shootBtn.textContent = '촬영 중지';
   shootBtn.classList.add('stop');
   recBadge.classList.add('on');
+  updateInfo();
 }
 
 function stopShooting() {
@@ -131,7 +157,7 @@ function stopShooting() {
   shootBtn.textContent = '촬영 시작';
   shootBtn.classList.remove('stop');
   recBadge.classList.remove('on');
-  shootInfo.textContent = `촬영을 멈췄어요. 총 ${count}장이 저장됐어요.`;
+  shootInfo.textContent = `촬영을 멈췄어요. 총 ${count}장이 서버에 저장됐어요.`;
 }
 
 shootBtn.addEventListener('click', () => {

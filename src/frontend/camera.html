@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>카메라 출결</title>
   <link rel="stylesheet" href="style.css">
+  <script src="js/api.js" defer></script>
   <script src="js/camera.js" defer></script>
 </head>
 <body>
@@ -57,7 +58,7 @@
     </div>
 
     <button class="btn full" type="button" id="shootBtn">촬영 시작</button>
-    <p class="shoot-info" id="shootInfo">촬영을 시작하면 10초마다 자동으로 사진이 저장돼요.</p>
+    <p class="shoot-info" id="shootInfo">촬영을 시작하면 10초마다 자동으로 사진을 서버에 올려 출석을 확인해요.</p>
 
     <canvas id="canvas" width="640" height="480" hidden></canvas>
   </main>
