@@ -26,6 +26,8 @@ pytest                    # 테스트
 | http://127.0.0.1:8000/docs | API 문서 (Swagger UI, 학생 등록도 여기서) |
 | http://127.0.0.1:8000/health | 서버 상태와 현재 얼굴 엔진 |
 
+Python 3.10 이상이 필요합니다. Python 3.11(pip 24.0, numpy 1.26.4)과 Python 3.14(numpy 2.x)에서 설치와 테스트를 확인했습니다.
+
 처음 실행하면 `src/backend/data/`(DB 파일, 사진)가 자동으로 만들어집니다. 이 폴더는 `.gitignore`에 포함되어 있습니다.
 
 **Live Server로 프론트엔드를 열 때**: 백엔드가 `src/backend/data`에 파일을 쓸 때마다 페이지가 새로고침되어 촬영이 끊깁니다. `/app/` 주소로 열거나, VS Code 설정 `liveServer.settings.ignoreFiles`에 `"**/src/backend/data/**"`를 추가하세요.
@@ -120,3 +122,5 @@ python -m backend.scripts.recompute_embeddings
   교수 확인용 얼굴 이미지와 모델 교체 시 임베딩 재계산에 사용합니다. 출결 화면의 "사진 모두 지우기"(`DELETE /sessions/{id}/photos`)로만 삭제됩니다.
 - **사진과 DB는 각자 PC에만 저장됩니다.** `src/backend/data/`는 git에서 제외되므로, 저장소를 받은 팀원은 빈 DB로 시작하고 학생도 각자 등록해야 합니다.
 - **"확인 필요" 상태**: 지금은 present/absent 두 가지이고, 인식되지 않은 얼굴은 `GET /sessions/{id}/detections`에서 `matched_student_id: null`로 확인합니다.
+- **수강 명단 제한 없음** (README의 "수강 명단에 한정해 매칭"과 다름): 강의와 학생을 잇는 테이블이 없어서, 모든 수업에서 **등록된 학생 전체**를 상대로 매칭하고 출석을 계산합니다.
+  데모 단계에서는 이대로 두고, 이후 `courses`·`enrollments` 테이블을 추가해 매칭 대상과 출석 대상을 수강생으로 제한할 예정입니다.
