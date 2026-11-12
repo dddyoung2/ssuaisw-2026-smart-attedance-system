@@ -37,3 +37,14 @@ src/exp/**/results/logs/
 # 기타
 .DS_Store
 ~$*
+
+# 백엔드 데이터: 얼굴 사진·임베딩이 든 DB (개인정보, 절대 커밋 금지)
+src/backend/data/
+*.db
+*.sqlite3
+
+# 가상환경 (venv 이름도 제외)
+venv/
+
+# 테스트 캐시
+.pytest_cache/
