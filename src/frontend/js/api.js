@@ -7,7 +7,7 @@ const API_BASE = location.pathname.startsWith('/app/')
   ? location.origin
   : `${location.protocol}//${location.hostname}:8000`;
 
-// 응답 안의 상대경로(/photos/1/image 등)를 절대주소로
+// API 경로(/lectures/1/attendance 등)를 절대주소로
 function apiUrl(path) {
   return API_BASE + path;
 }
@@ -47,13 +47,20 @@ function escapeHtml(s) {
   }[c]));
 }
 
-// 두 페이지가 같은 수업 회차를 보도록 localStorage 에 공유
-const SESSION_KEY = 'currentSessionId';
+// 두 페이지가 같은 수업 회차(lecture_id)를 보도록 localStorage 에 공유
+const LECTURE_KEY = 'currentLectureId';
 
-function getCurrentSessionId() {
-  try { return localStorage.getItem(SESSION_KEY); } catch (e) { return null; }
+function getCurrentLectureId() {
+  try { return localStorage.getItem(LECTURE_KEY); } catch (e) { return null; }
 }
 
-function setCurrentSessionId(id) {
-  try { localStorage.setItem(SESSION_KEY, id); } catch (e) {}
+function setCurrentLectureId(id) {
+  try { localStorage.setItem(LECTURE_KEY, id); } catch (e) {}
+}
+
+// 브라우저 기준 오늘 날짜 (YYYY-MM-DD)
+function todayISO() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
