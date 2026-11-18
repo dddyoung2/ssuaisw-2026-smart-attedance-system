@@ -111,7 +111,7 @@ pip install -r requirements.txt
 
 ### 얼굴 탐지 가중치 다운로드
 
-[Releases](https://github.com/dddyoung2/ssuaisw-2026-smart-attedance-system/releases/tag/det-v1.0.0/Resnet50_Final.pth)에서 `Resnet50_Final.pth`를 받아 아래 경로에 둡니다. (git에는 포함되지 않습니다)
+[Releases](https://github.com/dddyoung2/ssuaisw-2026-smart-attedance-system/releases/tag/det-v1.0.0)에서 `Resnet50_Final.pth`를 받아 아래 경로에 둡니다. (git에는 포함되지 않습니다)
 
 src/backend/engines/retinaface/weight/Resnet50_Final.pth
 
