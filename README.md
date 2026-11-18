@@ -39,9 +39,10 @@
 - SQLAlchemy 2.0 / Pydantic
 
 **AI / 모델**
-- Face Detection: RetinaFace
+- Face Detection: RetinaFace (ResNet-50, 원본 크기 입력)
+- Face Alignment: CelebA-HQ 방식 정사각형 정렬·크롭 (리사이즈 없음)
 - Face Recognition: AdaFace
-- PyTorch (추가 예정)
+- PyTorch 2.12 (CPU) / OpenCV
 
 **Database / Infra**
 - SQLite
@@ -71,12 +72,14 @@ ssuaisw-2026-smart-attedance-system/
 │  ├─frontend                         # 출결 화면 (HTML/CSS/JS)
 │  │  └─js                            # 화면별 스크립트, API 호출
 │  ├─backend                          # 서버, DB (FastAPI, SQLite)
+│  │  ├─engines                       # 얼굴 탐지 엔진
+│  │  │  ├─retinaface                 # RetinaFace 모델 코드(MIT), weight/ 가중치 위치
+│  │  │  ├─detector.py                # 검출: 박스·5점 랜드마크
+│  │  │  ├─align.py                   # 정렬·크롭 (CelebA-HQ 방식, 리사이즈 없음)
+│  │  │  └─pipeline.py                # 인식 인계 출력 (박스 좌표·정렬 이미지 리스트)
 │  │  ├─routers                       # API: 학생, 수업, 사진, 검출
 │  │  ├─services                      # 출석 계산, 얼굴 매칭, 파일 저장
 │  │  └─scripts                       # 임베딩 재계산
-│  └─exp                              # 실험 코드
-│     ├─face-detection                # 얼굴 탐지: 비교, 확정, 튜닝
-│     └─face-recognition              # 얼굴 인식
 └─tests                               # 백엔드 테스트 (pytest)
 ```
 ---
@@ -103,6 +106,14 @@ python -m venv .venv
 ```bash
 pip install -r requirements.txt
 ```
+
+---
+
+### 얼굴 탐지 가중치 다운로드
+
+[Releases](https://github.com/dddyoung2/ssuaisw-2026-smart-attedance-system/releases/tag/det-v1.0.0/Resnet50_Final.pth)에서 `Resnet50_Final.pth`를 받아 아래 경로에 둡니다. (git에는 포함되지 않습니다)
+
+src/backend/engines/retinaface/weight/Resnet50_Final.pth
 
 ---
 
@@ -145,9 +156,9 @@ LOG_LEVEL=INFO
 
 | 지표 | 설명 | 결과 |
 |---|---|---|
-| 얼굴 탐지 재현율 | 사진 속 얼굴 중 찾아낸 비율 | 측정 예정 |
+| 얼굴 탐지 재현율 | 사진 속 얼굴 중 찾아낸 비율 | 96.59% (WACV19 강의실 사진, RetinaFace) |
 | 출석 판정 정확도 | 학생별 출석·결석 판정이 맞은 비율 | 측정 예정 |
-| 처리 시간 | 사진 1장 처리 시간 (CPU, ms) | 측정 예정 |
+| 처리 시간 | 사진 1장 처리 시간 (CPU, s) | 12MP 사진 1장 약 10~18초 (CPU) |
 
 ---
 
@@ -158,3 +169,9 @@ LOG_LEVEL=INFO
 | 이승호 | **Team Leader**, Face-Recognition Engineer | [![Github](https://img.shields.io/badge/Lsh9716-181717?style=flat&logo=github&logoColor=white)](https://github.com/Lsh9716) |
 | 김도영 | Face-Detection Engineer | [![Github](https://img.shields.io/badge/dddyoung2-181717?style=flat&logo=github&logoColor=white)](https://github.com/dddyoung2) |
 | 이예찬 | Full-Stack Engineer | [![Github](https://img.shields.io/badge/dpdcks-181717?style=flat&logo=github&logoColor=white)](https://github.com/dpdcks) |
+
+---
+## 출처
+
+- RetinaFace 모델 코드·가중치: [biubug6/Pytorch_Retinaface](https://github.com/biubug6/Pytorch_Retinaface) (MIT), WIDER FACE로 학습
+- 얼굴 정렬 규칙: CelebA-HQ 생성 방식 (Karras et al., Progressive Growing of GANs, 2018)
