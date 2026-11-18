@@ -16,6 +16,8 @@ SRC_DIR = BACKEND_DIR.parent  # <저장소>/src
 PROJECT_DIR = SRC_DIR.parent  # <저장소> (.env 위치)
 FRONTEND_DIR = SRC_DIR / "frontend"
 
+USAINT_DB_FILENAME = "usaint.db"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -25,12 +27,11 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    # 데이터(DB 파일, 사진) 저장 위치. 상대경로면 저장소 루트 기준.
+    # 데이터 폴더: usaint.db(데모용 usaint DB), 증명사진, 데모 사진. 상대경로면 저장소 루트 기준.
     data_dir: Path = BACKEND_DIR / "data"
 
-    # 비워두면 data_dir/attendance.db 를 쓰는 SQLite.
-    # 예) postgresql+psycopg://user:pass@localhost:5432/attendance
-    # (.env.example 의 기존 이름 DB_URL 도 인식)
+    # usaint DB 접속 주소. 비워두면 data_dir/usaint.db (SQLite).
+    # (.env.example 의 이름 DB_URL 과 DATABASE_URL 둘 다 인식)
     database_url: str | None = Field(
         default=None, validation_alias=AliasChoices("DATABASE_URL", "DB_URL")
     )
@@ -43,9 +44,6 @@ class Settings(BaseSettings):
 
     # 코사인 유사도가 이 값보다 "커야" 매칭
     threshold: float = 0.5
-
-    # true면 이전 수업에서 교수가 확인(verified)한 얼굴 임베딩도 비교 대상에 포함
-    use_verified_faces: bool = False
 
     # 업로드 파일 최대 크기(MB)
     max_upload_mb: float = 5.0
@@ -67,15 +65,15 @@ class Settings(BaseSettings):
     def db_url(self) -> str:
         if self.database_url:
             return self.database_url
-        return f"sqlite:///{(self.data_dir / 'attendance.db').as_posix()}"
+        return f"sqlite:///{(self.data_dir / USAINT_DB_FILENAME).as_posix()}"
 
     @property
     def student_photo_dir(self) -> Path:
         return self.data_dir / "photos" / "students"
 
     @property
-    def session_photo_dir(self) -> Path:
-        return self.data_dir / "photos" / "sessions"
+    def demo_photo_dir(self) -> Path:
+        return self.data_dir / "demo"
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -86,8 +84,7 @@ class Settings(BaseSettings):
         return int(self.max_upload_mb * 1024 * 1024)
 
     def ensure_dirs(self) -> None:
-        self.student_photo_dir.mkdir(parents=True, exist_ok=True)
-        self.session_photo_dir.mkdir(parents=True, exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache
