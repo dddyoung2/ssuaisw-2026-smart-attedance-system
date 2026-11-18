@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import FRONTEND_DIR, Settings, get_settings
 from .database import Base, make_engine, make_session_factory
 from .face_engine import create_face_engine
-from .routers import detections, photos, sessions, students
+from .routers import lectures, rooms
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings.ensure_dirs()
 
     db_engine = make_engine(settings.db_url)
-    # 데모용: 테이블이 없으면 생성. 운영/PostgreSQL 이전 시에는 Alembic 마이그레이션 권장.
+    # 데모용: usaint DB 테이블이 없으면 생성(빈 DB). 예시 데이터는 scripts/seed_usaint.py 로 넣는다.
+    # 실제 usaint 와 연동할 때는 테이블을 만들지 않고 읽기만 해야 한다.
     Base.metadata.create_all(db_engine)
 
     @asynccontextmanager
@@ -34,7 +35,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title="osogi 얼굴인식 출석 API",
         version="0.1.0",
-        description="강의실 사진 기반 자동 출석 데모 백엔드. **인증 없음 — 운영 전 인증 추가 필요.**",
+        description=(
+            "강의실 단체 사진으로 수강생 출석을 기록하는 데모 백엔드 (usaint DB 연동 구조). "
+            "**인증 없음 — 운영 전 인증 추가 필요.**"
+        ),
         lifespan=lifespan,
     )
     app.state.settings = settings
@@ -46,11 +50,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
 
-    for r in (students.router, sessions.router, photos.router, detections.router):
+    for r in (rooms.router, lectures.router):
         app.include_router(r)
 
     @app.get("/health", tags=["system"], summary="서버 상태")
@@ -67,11 +71,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return RedirectResponse("/app/")
 
     logger.info(
-        "DB=%s, FACE_ENGINE=%s, THRESHOLD=%s, USE_VERIFIED_FACES=%s, CORS=%s",
+        "DB=%s, FACE_ENGINE=%s, THRESHOLD=%s, CORS=%s",
         _mask_db_url(settings.db_url),
         settings.face_engine,
         settings.threshold,
-        settings.use_verified_faces,
         settings.cors_origin_list,
     )
     return app

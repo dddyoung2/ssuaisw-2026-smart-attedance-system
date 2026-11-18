@@ -1,98 +1,97 @@
-"""출석 계산.
+"""출석 처리 흐름.
 
-출석표는 항상 '그 수업의 모든 detection' 으로부터 다시 계산한다.
-그래서 사진 여러 장 합치기 / 교수 매칭 수정 / 사진 삭제가 모두 recompute() 하나로 처리된다.
-- 한 번이라도 매칭된 학생 → present, 나머지 등록 학생 → absent
-- source='manual' 인 행(교수가 직접 지정)은 덮어쓰지 않는다.
+① 회차 시작: 수강생 전원의 attendance 행을 present=false 로 준비
+② 사진 처리: 수강생 임베딩 조회 → 얼굴 엔진 → 1:1 매칭 → present=true 기록(OR)
+③ 출결 현황: 학생별 출석 여부 + 요약
+
+SQL 은 services/usaint.py 를 통해서만 실행한다. commit 은 호출자(라우터)가 한다.
+업로드 사진은 메모리에서만 처리하고 디스크·DB 어디에도 저장하지 않는다.
 """
 from __future__ import annotations
 
-from sqlalchemy import func, select
+import logging
+from dataclasses import dataclass
+
+import numpy as np
 from sqlalchemy.orm import Session
 
-from ..models import Attendance, Detection, SessionPhoto, Student, utcnow
-from ..schemas import AttendanceOut, AttendanceStudentOut, AttendanceSummary
+from ..face_engine import FaceEngine
+from . import usaint
+from .recognition import build_gallery, match_one_to_one
+from .usaint import LectureInfo
+
+logger = logging.getLogger(__name__)
 
 
-def matched_student_ids(db: Session, session_id: int) -> set[str]:
-    q = (
-        select(Detection.matched_student_id)
-        .join(SessionPhoto, SessionPhoto.photo_id == Detection.photo_id)
-        .where(SessionPhoto.session_id == session_id, Detection.matched_student_id.is_not(None))
-        .distinct()
-    )
-    return set(db.scalars(q))
+@dataclass(frozen=True)
+class Summary:
+    total: int
+    present: int
+    absent: int
 
 
-def recompute(db: Session, session_id: int) -> None:
-    """attendance 행을 detection 기준으로 맞춘다. commit 은 호출자가 한다."""
-    matched = matched_student_ids(db, session_id)
-    existing = {
-        a.student_id: a
-        for a in db.scalars(select(Attendance).where(Attendance.session_id == session_id))
-    }
-    for sid in db.scalars(select(Student.student_id)):
-        status = "present" if sid in matched else "absent"
-        row = existing.get(sid)
-        if row is None:
-            db.add(Attendance(session_id=session_id, student_id=sid, status=status, source="auto"))
-        elif row.source == "auto" and row.status != status:
-            row.status = status
-            row.updated_at = utcnow()
-    db.flush()
+@dataclass(frozen=True)
+class StartResult:
+    student_count: int  # 수강생 수
+    created: int  # 이번에 새로 만든 attendance 행 수
 
 
-def set_manual(db: Session, session_id: int, student_id: str, status: str) -> None:
-    """status: present/absent → 수동 지정, auto → 수동 해제 후 재계산."""
-    row = db.get(Attendance, (session_id, student_id))
-    if row is None:
-        row = Attendance(session_id=session_id, student_id=student_id, status="absent")
-        db.add(row)
-    if status == "auto":
-        row.source = "auto"
-        row.status = "present" if student_id in matched_student_ids(db, session_id) else "absent"
-    else:
-        row.source = "manual"
-        row.status = status
-    row.updated_at = utcnow()
-    db.flush()
+@dataclass(frozen=True)
+class PhotoResult:
+    face_count: int  # 사진에서 검출된 얼굴 수
+    matched_count: int  # 수강생과 매칭된 얼굴 수
+    summary: Summary
 
 
-def build_attendance(db: Session, session_id: int) -> AttendanceOut:
-    """출석 결과 (recompute 를 먼저 수행해 새로 등록된 학생도 포함)."""
-    recompute(db, session_id)
+def start_lecture(db: Session, lecture: LectureInfo) -> StartResult:
+    """수강생 attendance 행이 없으면 present=false 로 만든다(있으면 그대로, 여러 번 호출해도 안전)."""
+    student_count, created = usaint.ensure_attendance_rows(db, lecture)
+    return StartResult(student_count=student_count, created=created)
 
-    best = dict(
-        db.execute(
-            select(Detection.matched_student_id, func.max(Detection.similarity))
-            .join(SessionPhoto, SessionPhoto.photo_id == Detection.photo_id)
-            .where(
-                SessionPhoto.session_id == session_id,
-                Detection.matched_student_id.is_not(None),
-            )
-            .group_by(Detection.matched_student_id)
-        ).all()
-    )
-    rows = db.execute(
-        select(Student.student_id, Student.name, Attendance.status, Attendance.source)
-        .join(Attendance, Attendance.student_id == Student.student_id)
-        .where(Attendance.session_id == session_id)
-        .order_by(Student.student_id)
-    ).all()
 
-    students = [
-        AttendanceStudentOut(
-            student_id=sid,
-            name=name,
-            status=status,
-            source=source,
-            best_similarity=None if best.get(sid) is None else round(float(best[sid]), 4),
+def process_photo(
+    db: Session, lecture: LectureInfo, image: np.ndarray, engine: FaceEngine, threshold: float
+) -> PhotoResult:
+    # start 를 거치지 않았어도 출석이 누락되지 않도록 행을 먼저 준비한다.
+    usaint.ensure_attendance_rows(db, lecture)
+
+    # 그 회차 과목의 수강생 임베딩만 (전체 학생과 비교하지 않음)
+    gallery = build_gallery(usaint.enrolled_embeddings(db, lecture.course_code), engine.dim)
+    if gallery.skipped:
+        logger.warning(
+            "임베딩 차원이 %d이 아닌 수강생 %d명을 비교에서 제외했습니다. "
+            "scripts/compute_embeddings.py 로 다시 계산하세요.",
+            engine.dim,
+            gallery.skipped,
         )
-        for sid, name, status, source in rows
-    ]
-    present = sum(s.status == "present" for s in students)
-    return AttendanceOut(
-        session_id=session_id,
-        summary=AttendanceSummary(total=len(students), present=present, absent=len(students) - present),
-        students=students,
+
+    faces = engine.detect_and_embed(image)
+    matches = match_one_to_one([emb for _, emb in faces], gallery, threshold)
+    newly = usaint.mark_present(db, lecture.lecture_id, [m.student_id for m in matches])
+
+    summary = summarize(db, lecture.lecture_id)
+    logger.info(
+        "회차 %d 사진: 얼굴 %d개, 매칭 %d명(새 출석 %d명), 비교 수강생 %d명, 출석 %d/%d",
+        lecture.lecture_id,
+        len(faces),
+        len(matches),
+        newly,
+        len(gallery.student_ids),
+        summary.present,
+        summary.total,
     )
+    return PhotoResult(face_count=len(faces), matched_count=len(matches), summary=summary)
+
+
+def attendance_list(db: Session, lecture_id: int) -> tuple[list[tuple[str, str, bool]], Summary]:
+    rows = usaint.attendance_rows(db, lecture_id)
+    return rows, _summary(rows)
+
+
+def summarize(db: Session, lecture_id: int) -> Summary:
+    return _summary(usaint.attendance_rows(db, lecture_id))
+
+
+def _summary(rows: list[tuple[str, str, bool]]) -> Summary:
+    present = sum(1 for _, _, p in rows if p)
+    return Summary(total=len(rows), present=present, absent=len(rows) - present)
