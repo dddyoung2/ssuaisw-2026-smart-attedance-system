@@ -6,7 +6,15 @@
 
 /* ---------- 설정 ---------- */
 const INTERVAL_SEC = 60;     // 자동 촬영 주기(초)
-const JPEG_QUALITY = 0.8;    // 얼굴 인식을 위해 0.8
+const JPEG_QUALITY = 0.92;   // 얼굴 인식을 위해 높은 화질 (원본 해상도 유지)
+
+// 카메라가 지원하는 가장 높은 해상도로 열기.
+// ideal 은 "가능하면 이 값"이라는 뜻이라, 카메라가 지원하는 범위 안에서 가장 가까운 해상도가 선택된다
+// (4K 를 지원하지 않는 카메라도 오류 없이 그 카메라의 최대 해상도로 열린다).
+const VIDEO_CONSTRAINTS = {
+  width: { ideal: 4096 },
+  height: { ideal: 2160 },
+};
 
 /* ---------- 요소 ---------- */
 const roomBtn = document.getElementById('roomBtn');
@@ -35,6 +43,7 @@ let lectureId = null;    // 확정된 회차
 let timer = null;
 let count = 0;           // 업로드 성공한 사진 수
 let lastResult = '';
+let resolutionText = ''; // 카메라가 실제로 준 해상도 (예: 1920×1080)
 
 function setPanelOpen(open) {
   roomPanel.classList.toggle('open', open);
@@ -146,9 +155,11 @@ async function startCamera() {
     if (video.srcObject) {
       video.srcObject.getTracks().forEach(t => t.stop());
     }
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS, audio: false });
     video.srcObject = stream;
     cameraMsg.style.display = 'none';
+    const s = stream.getVideoTracks()[0].getSettings();
+    resolutionText = s.width && s.height ? `${s.width}×${s.height}` : '';
   } catch (err) {
     cameraMsg.textContent = '카메라를 연결할 수 없어요. 브라우저의 카메라 권한을 확인해 주세요.';
   }
@@ -158,6 +169,7 @@ async function startCamera() {
 function updateInfo(extra) {
   shootInfo.textContent =
     `${count}장 확인됨 · ${INTERVAL_SEC}초마다 자동 촬영 중` +
+    (resolutionText ? ` · ${resolutionText}` : '') +
     (lastResult ? ` · ${lastResult}` : '') +
     (extra ? ` · ${extra}` : '');
 }
@@ -169,8 +181,15 @@ function canvasToBlob() {
 async function capture() {
   if (!video.videoWidth || !lectureId) return;   // 카메라/회차가 아직 준비 안 됨
 
+  // 캡처 크기 = 카메라가 실제로 보내는 프레임 크기 (축소하지 않음)
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(video, 0, 0, w, h);
 
   // 찰칵 효과
   flash.classList.remove('go');

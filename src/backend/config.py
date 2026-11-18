@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     # 코사인 유사도가 이 값보다 "커야" 매칭
     threshold: float = 0.5
 
-    # 업로드 파일 최대 크기(MB)
-    max_upload_mb: float = 5.0
+    # 업로드 파일 최대 크기(MB). 카메라 원본 해상도(최대 4K) JPEG 가 들어오므로 여유 있게.
+    max_upload_mb: float = 10.0
 
     log_level: str = "INFO"
 

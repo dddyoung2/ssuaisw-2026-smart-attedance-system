@@ -146,7 +146,7 @@ src/backend/
 | `CORS_ORIGINS` | `http://127.0.0.1:5500,http://localhost:5500` | 쉼표로 구분 |
 | `FACE_ENGINE` | `dummy` | 얼굴 엔진 ([가이드](../../docs/face_engine_guide.md)) |
 | `THRESHOLD` | `0.5` | 코사인 유사도가 이 값보다 커야 매칭 |
-| `MAX_UPLOAD_MB` | `5` | 업로드 최대 크기 |
+| `MAX_UPLOAD_MB` | `10` | 업로드 최대 크기 (카메라 원본 해상도 사진, 최대 4K JPEG) |
 
 ## 설계상 한계
 
