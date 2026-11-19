@@ -10,6 +10,7 @@ usaint(숭실대 학사 포털) DB 에 이미 있는 학생·과목·강의실·
 
 - 테이블 6개, 명세에 있는 컬럼만 둔다(사진 테이블 없음: 업로드 사진은 저장하지 않음).
 - 증명사진은 파일로 두고 student.photo_path 에 경로만 저장한다.
+- lecture.photo_path 는 박스 친 수업 사진 경로 자리(저장 기능은 추후 작업).
 - 임베딩은 float32 numpy 배열을 tobytes() 한 BLOB.
 """
 from __future__ import annotations
@@ -91,6 +92,9 @@ class Lecture(Base):
     week: Mapped[int] = mapped_column(Integer)  # 주차
     session_no: Mapped[int] = mapped_column(Integer)  # 그 주의 몇 번째 수업인지
     date: Mapped[dt.date] = mapped_column(Date, index=True)
+    # 수업 사진 경로 (FD 모델로 학생 얼굴에 박스를 친 사진, DATA_DIR 기준 상대경로).
+    # 파일은 폴더에, DB에는 경로만. 아직 저장하는 코드는 없어 NULL.
+    photo_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     course: Mapped[Course] = relationship(back_populates="lectures")
     room: Mapped[Room] = relationship(back_populates="lectures")

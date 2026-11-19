@@ -15,7 +15,7 @@ EXPECTED = {
     "class": ["course_code", "course_name"],
     "student": ["student_id", "name", "photo_path", "embedding"],
     "enrollment": ["course_code", "student_id"],
-    "lecture": ["lecture_id", "course_code", "room_no", "week", "session_no", "date"],
+    "lecture": ["lecture_id", "course_code", "room_no", "week", "session_no", "date", "photo_path"],
     "attendance": ["lecture_id", "student_id", "present"],
 }
 EXPECTED_PK = {
@@ -72,6 +72,7 @@ def test_column_types(engine):
     assert types[("student", "embedding")] == "BLOB"
     assert types[("lecture", "lecture_id")] == "INTEGER"
     assert types[("lecture", "date")] == "DATE"
+    assert types[("lecture", "photo_path")].startswith("VARCHAR")
     assert types[("attendance", "present")] == "BOOLEAN"
     assert types[("room", "room_no")].startswith("VARCHAR")
 
@@ -82,6 +83,7 @@ def test_lecture_id_autoincrement_and_present_default_false(session):
     session.add(lec)
     session.flush()
     assert isinstance(lec.lecture_id, int)
+    assert lec.photo_path is None  # 수업 사진 경로는 비워 둘 수 있음
     # present 를 지정하지 않으면 false (DB 기본값)
     session.execute(
         text("INSERT INTO attendance (lecture_id, student_id) VALUES (:l, 'A')"), {"l": lec.lecture_id}
