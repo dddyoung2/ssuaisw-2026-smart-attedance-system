@@ -17,6 +17,7 @@ pip install -r requirements.txt
 copy .env.example .env            # 선택. 없으면 기본값 사용
 
 # 2) 예시 데이터 넣기 (usaint.db 를 새로 만듦, 기존 데이터 삭제)
+#    회차 중 "오늘" 회차는 실행한 날짜 기준으로 만들어지므로 데모 당일에 다시 실행하세요.
 cd src
 python -m backend.scripts.seed_usaint
 cd ..
@@ -25,12 +26,13 @@ cd ..
 python main.py                     # 개발 중에는 python main.py --reload
 
 # 4) 화면 확인: http://127.0.0.1:8000/app/
-#    카메라 → 강의실 21303 → "오늘 수업 찾기" → 수업 선택(가반/나반) → 촬영 시작 → 출결 현황 보기
+#    과목 목록 → [과목 홈 바로가기] → 오늘 회차(분홍색) [출결 확인]
+#    → [전자 출결] → [카메라] → [촬영 시작] → [출결 현황 보기]
 ```
 
 | 주소 | 내용 |
 |---|---|
-| http://127.0.0.1:8000/app/ | 출결 화면 (`src/frontend`를 백엔드가 직접 제공) |
+| http://127.0.0.1:8000/app/ | 출결 화면 (`src/frontend`를 백엔드가 직접 제공, 첫 화면은 과목 목록) |
 | http://127.0.0.1:8000/docs | API 문서 (Swagger UI) |
 | http://127.0.0.1:8000/health | 서버 상태와 현재 얼굴 엔진 |
 
@@ -42,36 +44,53 @@ Python 3.10 이상이 필요합니다. Python 3.11(numpy 1.26.4)과 Python 3.14(
 
 ### seed가 만드는 예시 데이터 (`DATA_DIR`, 기본 `src/backend/data/`, git 제외)
 
+여러 번 실행해도 중복으로 쌓이지 않습니다(DB와 seed가 만든 사진을 지우고 다시 만듦).
+
 | 항목 | 내용 |
 |---|---|
-| room | `21303` (정보과학관, 카메라 1개) |
-| class | `2150163301` 알고리즘(가반), `2150163302` 알고리즘(나반) |
-| student | 6명. 증명사진은 실제 얼굴이 아닌 **합성 패턴 이미지**(`photos/students/<학번>.png`)이고, 임베딩도 계산해서 넣음 |
-| enrollment | 가반 4명, 나반 3명 (20231004는 두 분반을 모두 수강) |
-| lecture | **실행한 날(오늘)** 21303에 가반·나반 각 1회차(같은 강의실·같은 날 2개), 지난주 2회차, 이틀 뒤 2회차 |
-| demo/ | 데모용 단체 사진 3장 (아래 참고) |
+| class | `2150165801` 시스템프로그래밍, `2150163303` 알고리즘, `2150061301` 오픈소스기반기초설계 |
+| room | `11101`, `21303`, `21304`, `21305`. `camera`는 카메라 연결 정보 자리(추후 연동, 화면에는 표시 안 함) |
+| lecture | 2026-09-01이 있는 주를 1주차로 **15주차까지**. 시스템프로그래밍은 **주 2회**(화·목, 21303), 알고리즘은 화(21304), 오픈소스기반기초설계는 수(21305) |
+| 오늘 회차 | 실행한 날에 정규 회차가 없는 과목에는 **오늘 날짜 회차를 하나 추가**합니다. 그래서 모든 과목에 오늘 회차가 있습니다. 차수(`session_no`)는 같은 주 안에서 날짜순으로 다시 매깁니다(예: 11/19(목) 실행 → 알고리즘 `12-1` 11/17(화), `12-2` 11/19(목)) |
+| student | 8명. 증명사진은 실제 얼굴이 아닌 **합성 패턴 이미지**(`photos/students/<학번>.png`)이고, 임베딩도 계산해서 넣음 |
+| enrollment | 과목마다 4~5명 (여러 과목을 함께 듣는 학생 포함) |
+| demo/ | 데모용 단체 사진 4장 (아래 참고) |
 
 **더미 엔진에서 출석이 잡히는 걸 보려면**
-더미 엔진은 실제 얼굴을 인식하지 못해서 웹캠으로 찍은 사진은 아무와도 매칭되지 않습니다. 대신 `/docs`의 `POST /lectures/{id}/photos`에 `demo/` 사진을 올리면 출석이 반영됩니다.
+더미 엔진은 실제 얼굴을 인식하지 못해서 웹캠으로 찍은 사진은 아무와도 매칭되지 않습니다. 대신 `/docs`의 `POST /lectures/{id}/photos`에 `demo/` 사진을 올리면 출석이 반영됩니다. 회차 번호(`lecture_id`)는 seed 실행 결과에 출력됩니다.
 
-| 파일 | 결과 (가반 회차 기준) |
+| 파일 | 결과 |
 |---|---|
-| `lecture_A_students_1001_1002_1003.png` | 3명 출석 |
-| `lecture_A_non_enrolled_1005.png` | 0명 (나반 학생이라 비교 대상이 아님) |
-| `lecture_B_students_1005_1006.png` | 나반 회차에서 2명 출석 |
+| `algorithm_1003_1004_1005.png` | 알고리즘 회차에서 3명 출석 (수강생 4명) |
+| `algorithm_non_enrolled_1001_1002.png` | 알고리즘 회차에서 0명 (수강생이 아니라 비교 대상이 아님) |
+| `sysprog_1001_1002_1003.png` | 시스템프로그래밍 회차에서 3명 출석 |
+| `opensource_1007_1008.png` | 오픈소스기반기초설계 회차에서 2명 출석 |
 
 **Live Server로 열 때**: 백엔드가 `src/backend/data`의 DB에 쓸 때마다 페이지가 새로고침될 수 있습니다. `/app/` 주소로 여는 것을 권장합니다.
 
-## 동작 시퀀스
+## 화면 흐름
 
-| 단계 | 화면 → 백엔드 | 백엔드 처리 |
+| 화면 | 파일 | 화면 → 백엔드 | 다음 화면 |
+|---|---|---|---|
+| 1. 과목 목록 (첫 화면) | `index.html` | `GET /courses` | `course.html?course=<과목코드>` |
+| 2. 과목 홈 = 회차 목록 | `course.html` | `GET /courses/{code}`, `GET /courses/{code}/lectures` | [출결 확인] → `method.html?lecture=<id>` |
+| 3. 출결 방식 선택 | `method.html` | `GET /lectures/{id}` | [전자 출결] → [카메라] → `camera.html?lecture=<id>` |
+| 4. 카메라 | `camera.html` | `GET /lectures/{id}`, `GET /rooms`, 촬영 시작 시 `POST /lectures/{id}/start` → 즉시 1장 + 60초마다 `POST /lectures/{id}/photos` | [출결 현황 보기] → `attendance.html?lecture=<id>` |
+| 5. 출결 현황 | `attendance.html` | `GET /lectures/{id}/attendance` (10초마다) | – |
+
+- 선택한 회차는 URL 쿼리로 넘기고 localStorage에도 저장합니다. URL에 `lecture`가 없으면 마지막으로 고른 회차를 쓰고, 그것도 없으면 과목 목록으로 돌아갑니다.
+- "← 뒤로"는 바로 이전 단계로 갑니다(출결 현황 → 카메라 → 출결 방식 선택 → 그 회차의 과목 홈 → 과목 목록).
+- 과목 홈: 주차 칸은 `<week>-<session_no>` 배지, 수업일 칸은 `9/1 (화)`와 강의실 번호. [수업일순]/[주차순] 토글은 화면에서 정렬만 바꿉니다. 오늘 회차 행은 분홍색으로 강조하고 그 행으로 스크롤합니다.
+- 카메라: 강의실 기본값은 그 회차의 강의실입니다. 다른 강의실을 골라도 DB의 회차는 바뀌지 않습니다(어느 카메라로 찍을지만 고르는 것, 강의실 카메라 연동은 추후 작업이라 지금은 브라우저 카메라로 촬영).
+- 수동·큐알·코드 출결은 "준비 중" 안내만 합니다.
+
+## 출석 처리
+
+| 단계 | API | 백엔드 처리 |
 |---|---|---|
-| ① 출결 방식 선택 | (첫 화면) | – |
-| ② 강의실·카메라 선택 | `GET /rooms` | ROOM 조회 → `room_no`, `camera` |
-| ② 수업 확인 | `GET /lectures?room_no=…&date=오늘` | LECTURE에서 강의실·날짜가 같은 회차 조회. **여러 개면 교수가 고름**, 없으면 "오늘 이 강의실에 등록된 수업이 없습니다" |
-| ② 회차 확정 | `POST /lectures/{id}/start` | 그 과목 수강생 전원의 ATTENDANCE 행이 없으면 `present=false`로 생성 |
-| ③ 촬영 (즉시 1장, 이후 60초마다) | `POST /lectures/{id}/photos` | ENROLLMENT⋈STUDENT JOIN 한 번으로 **수강생 임베딩만** 조회 → 얼굴 엔진(검출 → 정렬·크롭 → 임베딩) → **1:1 매칭** → 매칭된 학생 `present=true`. **사진은 저장하지 않음** |
-| ④ 출결현황 (10초마다) | `GET /lectures/{id}/attendance` | ATTENDANCE⋈STUDENT → 학번, 이름, 출석 여부, 요약 |
+| 회차 시작 | `POST /lectures/{id}/start` | 그 과목 수강생 전원의 ATTENDANCE 행이 없으면 `present=false`로 생성 (여러 번 호출해도 안전) |
+| 사진 처리 | `POST /lectures/{id}/photos` | ENROLLMENT⋈STUDENT JOIN 한 번으로 **수강생 임베딩만** 조회 → 얼굴 엔진(검출 → 정렬·크롭 → 임베딩) → **1:1 매칭** → 매칭된 학생 `present=true`. **사진은 저장하지 않음** |
+| 출결 현황 | `GET /lectures/{id}/attendance` | ATTENDANCE⋈STUDENT → 학번, 이름, 출석 여부, 요약 |
 
 **1:1 매칭**: 모든 (얼굴, 수강생) 쌍의 코사인 유사도를 구하고, 유사도가 높은 쌍부터 "둘 다 아직 배정되지 않았으면" 배정합니다(greedy). 한 사진 안에서 얼굴 하나는 수강생 한 명에게만, 수강생 한 명은 얼굴 하나에만 배정됩니다. 유사도가 `THRESHOLD`(기본 0.5)보다 커야 인정합니다.
 
@@ -104,16 +123,20 @@ class ─1:N────┘                              │
 
 | Method | 경로 | 응답 |
 |---|---|---|
-| GET | `/rooms` | `[{room_no, camera}]` |
-| GET | `/lectures?room_no=21303&date=2026-11-18` | `[{lecture_id, course_code, course_name, week, session_no, date, room_no}]` (`date`를 생략하면 서버 기준 오늘) |
+| GET | `/courses` | `[{course_code, course_name, lecture_count}]` (과목명 순, `lecture_count` = 회차 수) |
+| GET | `/courses/{course_code}` | `{course_code, course_name}` |
+| GET | `/courses/{course_code}/lectures` | `[{lecture_id, week, session_no, date, room_no}]` (수업일 → 주차 → 차수 순) |
+| GET | `/lectures/{lecture_id}` | `{lecture_id, course_code, course_name, week, session_no, date, room_no}` |
 | POST | `/lectures/{lecture_id}/start` | `{lecture_id, student_count, created}` |
 | POST | `/lectures/{lecture_id}/photos` | multipart `photo` (jpg/jpeg/png) → `{face_count, matched_count, summary:{total, present, absent}}` |
 | GET | `/lectures/{lecture_id}/attendance` | `{lecture:{…}, summary:{…}, students:[{student_id, name, present}]}` |
+| GET | `/rooms` | `[{room_no, camera}]` (화면은 `room_no`만 사용) |
 | GET | `/health` | `{status, face_engine, embedding_dim}` |
 
-- 없는 `lecture_id`는 404를 반환합니다.
+- 없는 과목·회차는 404를 반환합니다.
 - 잘못된 파일: 빈 파일이거나 이미지가 아니면 400, 크기 초과(`MAX_UPLOAD_MB`)는 413, jpg/png가 아니면 415를 반환합니다.
 - 어떤 응답에도 임베딩 값은 포함되지 않습니다.
+- **삭제됨**: `GET /lectures?room_no=&date=` (강의실+날짜로 회차 찾기). 회차는 이제 과목 홈에서 먼저 고릅니다.
 
 ## 코드 구조
 
@@ -126,7 +149,7 @@ src/backend/
 ├─ models.py                 usaint 6개 테이블
 ├─ schemas.py                응답 형식
 ├─ face_engine.py            얼굴 엔진 인터페이스 + 더미 구현 (DB 접근 없음)
-├─ routers/                  rooms.py, lectures.py (요청 접수)
+├─ routers/                  courses.py, lectures.py, rooms.py (요청 접수)
 ├─ services/
 │  ├─ usaint.py              ★ usaint DB 를 읽고 쓰는 SQL 은 모두 여기에 (실제 usaint 연동 시 이 파일만 교체)
 │  ├─ recognition.py         1:1 매칭 (순수 계산)
@@ -135,6 +158,13 @@ src/backend/
 └─ scripts/
    ├─ seed_usaint.py         데모용 usaint.db + 예시 데이터
    └─ compute_embeddings.py  학생 임베딩 (재)계산 — FR 모델을 바꾸면 실행
+src/frontend/
+├─ index.html                1. 과목 목록
+├─ course.html               2. 과목 홈 (회차 목록)
+├─ method.html               3. 출결 방식 선택
+├─ camera.html               4. 카메라
+├─ attendance.html           5. 출결 현황
+└─ js/                       화면별 스크립트, api.js(공용: API 호출, 회차 번호, 날짜 표시)
 ```
 
 ## 환경 변수 (.env)
@@ -150,8 +180,9 @@ src/backend/
 
 ## 설계상 한계
 
-- **회차 선택**: LECTURE에 시간 컬럼이 없어서 같은 강의실·같은 날에 회차가 여러 개면 자동으로 정할 수 없습니다. 교수가 화면에서 직접 고릅니다.
-- **사진 미저장**: 업로드 사진은 메모리에서 처리한 뒤 버립니다(README의 "사진 즉시 삭제"와 일치). 나중에 인식 결과를 다시 확인하거나 재처리할 수 없습니다.
+- **DB에 없어 표시하지 않는 항목**: 학기, 교수명(과목 카드), 수업 시간, 건물 이름(회차 목록), LMS의 동영상·화상강의·과제·퀴즈·토론·공지 수. 화면에는 DB에 있는 값(과목명·코드, 회차 수, 주차-차수, 날짜, 강의실 번호)만 보여 줍니다.
+- **카메라 연동 전**: `room.camera`(카메라 연결 정보)는 아직 쓰지 않고, 브라우저가 연결된 카메라로 촬영합니다. 카메라 화면에서 고른 강의실은 표시용입니다.
+- **사진 미저장**: 업로드 사진은 메모리에서 처리한 뒤 버립니다. 나중에 인식 결과를 다시 확인하거나 재처리할 수 없습니다.
 - **수동 수정 없음**: 교수가 출석을 직접 고치는 API는 없습니다. 인식되지 않은 학생은 결석으로 남습니다.
 - **수강 명단 기준**: 수강생만 비교하므로, 등록되지 않은 사람이나 다른 분반 학생은 매칭되지 않습니다(의도한 동작).
 - 더미 엔진은 실제 얼굴을 인식하지 못합니다. 실제 모델(RetinaFace + FR 모델)을 연결해야 웹캠 사진으로 출석이 잡힙니다.
