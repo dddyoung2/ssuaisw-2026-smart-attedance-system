@@ -1,21 +1,32 @@
-// ===== 1페이지: 출결 방식 선택 =====
-const eBtn = document.getElementById('eBtn');
-const eOptions = document.getElementById('eOptions');
+// ===== 1. 과목 목록 (첫 화면) =====
+// (api.js 가 먼저 로드되어 있어야 함)
+// GET /courses → 과목 카드 (과목명 (과목코드), 대면 수업 출결 수 = 회차 수) → course.html?course=코드
 
-// 전자 출결 버튼 → 큐알/코드/카메라 버튼 펼치기
-eBtn.addEventListener('click', () => {
-  const open = eOptions.classList.toggle('open');
-  eBtn.classList.toggle('active', open);
-  eBtn.setAttribute('aria-expanded', open);
-});
+const courseList = document.getElementById('courseList');
+const listMsg = document.getElementById('listMsg');
 
-// 아직 만들지 않은 기능들
-document.getElementById('manualBtn').addEventListener('click', () => {
-  alert('수동 출결 페이지는 준비 중이에요.');
-});
-document.getElementById('qrBtn').addEventListener('click', () => {
-  alert('QR 출결은 준비 중이에요.');
-});
-document.getElementById('codeBtn').addEventListener('click', () => {
-  alert('코드 출결은 준비 중이에요.');
-});
+function courseCard(c) {
+  const href = `course.html?course=${encodeURIComponent(c.course_code)}`;
+  return `
+    <li class="course-card">
+      <h2 class="course-title">${escapeHtml(c.course_name)} <span class="code">(${escapeHtml(c.course_code)})</span></h2>
+      <div class="course-stat">
+        <strong>${c.lecture_count}</strong><span>대면 수업 출결</span>
+      </div>
+      <a class="btn course-go" href="${href}">과목 홈 바로가기 <span aria-hidden="true">→</span></a>
+    </li>`;
+}
+
+async function loadCourses() {
+  try {
+    const courses = await api('/courses');   // 서버가 과목명 순으로 정렬해서 준다
+    courseList.innerHTML = courses.map(courseCard).join('');
+    listMsg.textContent = courses.length
+      ? ''
+      : '등록된 과목이 없어요. 서버에서 예시 데이터(seed)를 먼저 넣어 주세요.';
+  } catch (e) {
+    listMsg.textContent = e.message;
+  }
+}
+
+loadCourses();

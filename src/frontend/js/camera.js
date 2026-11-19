@@ -1,8 +1,10 @@
-// ===== 2페이지: 카메라 출결 =====
-// (api.js 가 먼저 로드되어 있어야 함: api(), setCurrentLectureId(), todayISO())
+// ===== 4. 카메라 출결 =====
+// (api.js 가 먼저 로드되어 있어야 함)
 //
-// 시퀀스 ② 강의실·카메라 선택 → 오늘 수업 회차 확인 → 회차 시작
-//        ③ 촬영 시작: 즉시 1장, 이후 60초마다 단체 사진 업로드
+// 수업 회차는 앞 화면에서 정해져 URL(?lecture=)로 넘어온다.
+// 강의실: GET /rooms 목록, 기본값은 그 회차의 강의실. 다른 강의실을 골라도 DB 의 회차는 바꾸지 않는다.
+//         (강의실 카메라 연동은 추후 작업. 지금은 이 브라우저의 카메라로 찍는다)
+// 촬영 시작: POST /lectures/{id}/start → 즉시 1장 + 60초마다 POST /lectures/{id}/photos
 
 /* ---------- 설정 ---------- */
 const INTERVAL_SEC = 60;     // 자동 촬영 주기(초)
@@ -17,16 +19,12 @@ const VIDEO_CONSTRAINTS = {
 };
 
 /* ---------- 요소 ---------- */
+const lectureInfo = document.getElementById('lectureInfo');
 const roomBtn = document.getElementById('roomBtn');
 const roomPanel = document.getElementById('roomPanel');
 const roomSelect = document.getElementById('room');
-const findLectureBtn = document.getElementById('findLecture');
-const lecturePick = document.getElementById('lecturePick');
-const lectureSelect = document.getElementById('lecture');
-const applyLectureBtn = document.getElementById('applyLecture');
-const roomMsg = document.getElementById('roomMsg');
-const roomLabel = document.getElementById('roomLabel');
 const roomValue = document.getElementById('roomValue');
+const roomMsg = document.getElementById('roomMsg');
 
 const video = document.getElementById('video');
 const cameraMsg = document.getElementById('cameraMsg');
@@ -37,14 +35,15 @@ const canvas = document.getElementById('canvas');
 const flash = document.getElementById('flash');
 
 /* ---------- 상태 ---------- */
-let rooms = [];          // [{room_no, camera}]
-let lectures = [];       // 오늘 이 강의실의 회차 목록
-let lectureId = null;    // 확정된 회차
+const lectureId = requireLectureId();   // 없으면 과목 목록으로 이동
+let lecture = null;      // GET /lectures/{id}
 let timer = null;
+let starting = false;    // start 요청 중 (중복 클릭 방지)
 let count = 0;           // 업로드 성공한 사진 수
 let lastResult = '';
 let resolutionText = ''; // 카메라가 실제로 준 해상도 (예: 1920×1080)
 
+/* ---------- 강의실 선택 ---------- */
 function setPanelOpen(open) {
   roomPanel.classList.toggle('open', open);
   roomBtn.setAttribute('aria-expanded', open);
@@ -54,97 +53,31 @@ roomBtn.addEventListener('click', () => {
   setPanelOpen(!roomPanel.classList.contains('open'));
 });
 
-function lectureLabel(l) {
-  return `${l.course_name} · ${l.week}주차 ${l.session_no}차시`;
+function roomLabel(roomNo) {
+  return lecture && roomNo === lecture.room_no ? `${roomNo} (수업 강의실)` : roomNo;
 }
 
-/* ---------- ② 강의실 목록 ---------- */
+roomSelect.addEventListener('change', () => {
+  roomValue.textContent = roomLabel(roomSelect.value);
+  setPanelOpen(false);
+});
+
 async function loadRooms() {
-  roomMsg.textContent = '강의실 목록을 불러오는 중…';
+  let rooms;
   try {
     rooms = await api('/rooms');
   } catch (e) {
-    roomMsg.textContent = e.message;
+    roomMsg.textContent = `강의실 목록을 불러올 수 없어요. ${e.message}`;
     return;
   }
+  // 카메라 연결 정보(camera)는 화면에 표시하지 않는다. 강의실 번호만.
   roomSelect.innerHTML = '';
-  for (const r of rooms) {
-    roomSelect.add(new Option(r.camera ? `${r.room_no} · ${r.camera}` : r.room_no, r.room_no));
+  for (const r of rooms) roomSelect.add(new Option(roomLabel(r.room_no), r.room_no));
+  if (lecture && rooms.some(r => r.room_no === lecture.room_no)) {
+    roomSelect.value = lecture.room_no;
   }
-  roomMsg.textContent = rooms.length
-    ? ''
-    : '등록된 강의실이 없어요. 서버에서 예시 데이터(seed)를 먼저 넣어 주세요.';
-  findLectureBtn.disabled = !rooms.length;
-}
-
-/* ---------- ② 오늘 수업 회차 확인 ---------- */
-findLectureBtn.addEventListener('click', async () => {
-  if (timer) stopShooting();
-  resetLecture();
-  const roomNo = roomSelect.value;
-  if (!roomNo) return;
-
-  findLectureBtn.disabled = true;
-  roomMsg.textContent = '오늘 수업을 찾는 중…';
-  try {
-    lectures = await api(`/lectures?room_no=${encodeURIComponent(roomNo)}&date=${todayISO()}`);
-  } catch (e) {
-    roomMsg.textContent = e.message;
-    return;
-  } finally {
-    findLectureBtn.disabled = false;
-  }
-
-  if (!lectures.length) {
-    roomMsg.textContent = '오늘 이 강의실에 등록된 수업이 없습니다.';
-    return;
-  }
-  if (lectures.length === 1) {          // 하나면 바로 확정
-    roomMsg.textContent = '';
-    await startLecture(lectures[0]);
-    return;
-  }
-  // 여러 개면 교수가 고른다 (LECTURE 에 시간 정보가 없음)
-  lectureSelect.innerHTML = '';
-  lectures.forEach((l, i) => lectureSelect.add(new Option(lectureLabel(l), i)));
-  lecturePick.hidden = false;
-  roomMsg.textContent = `오늘 이 강의실에 수업이 ${lectures.length}개 있어요. 진행할 수업을 골라 주세요.`;
-});
-
-applyLectureBtn.addEventListener('click', () => {
-  const l = lectures[Number(lectureSelect.value)];
-  if (l) startLecture(l);
-});
-
-function resetLecture() {
-  lectureId = null;
-  lectures = [];
-  lecturePick.hidden = true;
-  shootBtn.disabled = true;
-  count = 0;
-  lastResult = '';
-}
-
-// 회차 확정 → 수강생 출석 행 준비 (POST /lectures/{id}/start)
-async function startLecture(l) {
-  applyLectureBtn.disabled = true;
-  try {
-    const res = await api(`/lectures/${l.lecture_id}/start`, { method: 'POST' });
-    lectureId = l.lecture_id;
-    setCurrentLectureId(lectureId);
-    roomLabel.textContent = `${l.room_no} 강의실 · ${l.date}`;
-    roomValue.textContent = lectureLabel(l);
-    lecturePick.hidden = true;
-    roomMsg.textContent = '';
-    setPanelOpen(false);
-    shootBtn.disabled = false;
-    shootInfo.textContent =
-      `수강생 ${res.student_count}명 · 촬영을 시작하면 ${INTERVAL_SEC}초마다 자동으로 출석을 확인해요.`;
-  } catch (e) {
-    roomMsg.textContent = `수업을 시작할 수 없어요. ${e.message}`;
-  } finally {
-    applyLectureBtn.disabled = false;
-  }
+  roomValue.textContent = roomSelect.value ? roomLabel(roomSelect.value) : '-';
+  roomBtn.disabled = rooms.length < 2;
 }
 
 /* ---------- 카메라 연결 ---------- */
@@ -165,7 +98,7 @@ async function startCamera() {
   }
 }
 
-/* ---------- ③ 주기적 촬영 + 업로드 ---------- */
+/* ---------- 주기적 촬영 + 업로드 ---------- */
 function updateInfo(extra) {
   shootInfo.textContent =
     `${count}장 확인됨 · ${INTERVAL_SEC}초마다 자동 촬영 중` +
@@ -179,7 +112,7 @@ function canvasToBlob() {
 }
 
 async function capture() {
-  if (!video.videoWidth || !lectureId) return;   // 카메라/회차가 아직 준비 안 됨
+  if (!video.videoWidth) return;               // 카메라가 아직 준비 안 됨
 
   // 캡처 크기 = 카메라가 실제로 보내는 프레임 크기 (축소하지 않음)
   const w = video.videoWidth;
@@ -214,13 +147,30 @@ async function capture() {
   }
 }
 
-function startShooting() {
-  if (!lectureId) return;
+async function startShooting() {
+  if (!lecture || starting) return;
+  starting = true;
+  shootBtn.disabled = true;
+  shootInfo.textContent = '수강생 출석부를 준비하는 중…';
+  try {
+    // 수강생 전원의 출석 행 준비 (이미 있으면 그대로, 여러 번 호출해도 안전)
+    const res = await api(`/lectures/${lectureId}/start`, { method: 'POST' });
+    shootInfo.textContent = `수강생 ${res.student_count}명`;
+  } catch (e) {
+    shootInfo.textContent = `촬영을 시작할 수 없어요. ${e.message}`;
+    return;
+  } finally {
+    starting = false;
+    shootBtn.disabled = false;
+  }
+
   capture();                                   // 시작하자마자 1장
   timer = setInterval(capture, INTERVAL_SEC * 1000);
   shootBtn.textContent = '촬영 중지';
   shootBtn.classList.add('stop');
   recBadge.classList.add('on');
+  roomBtn.disabled = true;                     // 촬영 중에는 강의실 변경 막기
+  setPanelOpen(false);
   updateInfo();
 }
 
@@ -230,6 +180,7 @@ function stopShooting() {
   shootBtn.textContent = '촬영 시작';
   shootBtn.classList.remove('stop');
   recBadge.classList.remove('on');
+  roomBtn.disabled = roomSelect.options.length < 2;
   shootInfo.textContent = `촬영을 멈췄어요. 총 ${count}장으로 출석을 확인했어요.`;
 }
 
@@ -239,5 +190,16 @@ shootBtn.addEventListener('click', () => {
 });
 
 /* ---------- 시작 ---------- */
-startCamera();
-loadRooms();
+async function init() {
+  document.getElementById('backLink').href = `method.html?lecture=${lectureId}`;
+  document.getElementById('attendanceLink').href = `attendance.html?lecture=${lectureId}`;
+
+  lecture = await showLectureInfo(lectureId, lectureInfo);
+  await loadRooms();
+  shootBtn.disabled = !lecture;
+}
+
+if (lectureId) {
+  startCamera();
+  init();
+}

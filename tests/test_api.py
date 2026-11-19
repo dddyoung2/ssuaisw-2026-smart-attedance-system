@@ -1,6 +1,7 @@
 """API 테스트: 과목·회차 조회, 회차 시작 → 사진 → 출결 현황 (더미 엔진, 임시 usaint DB)."""
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import inspect, select, update
 
 from backend.models import Attendance, Course, Lecture, Room, Student
@@ -280,10 +281,34 @@ def test_old_apis_removed(client):
         assert client.get(path).status_code == 404
 
 
+@pytest.mark.parametrize(
+    "path, script, marker",
+    [
+        ("/app/", "js/index.js", 'id="courseList"'),  # 첫 화면 = 과목 목록
+        ("/app/course.html", "js/course.js", 'id="lectureList"'),
+        ("/app/method.html", "js/method.js", 'id="eBtn"'),
+        ("/app/camera.html", "js/camera.js", 'id="shootBtn"'),
+        ("/app/attendance.html", "js/attendance.js", 'id="studentList"'),
+    ],
+)
+def test_frontend_pages_served(client, path, script, marker):
+    page = client.get(path)
+    assert page.status_code == 200
+    assert 'src="js/api.js"' in page.text and f'src="{script}"' in page.text and marker in page.text
+    # 연결된 스크립트도 실제로 제공된다
+    assert client.get("/app/js/api.js").status_code == 200
+    assert client.get(f"/app/{script}").status_code == 200
+
+
+def test_frontend_no_removed_api_calls(client):
+    """프론트엔드가 삭제된 API(강의실+날짜 회차 조회, /sessions)를 부르지 않는다."""
+    for script in ("api", "index", "course", "method", "camera", "attendance"):
+        js = client.get(f"/app/js/{script}.js").text
+        assert "/lectures?room_no" not in js and "/sessions" not in js, script
+
+
 def test_health_frontend_and_cors(client):
     assert client.get("/health").json() == {"status": "ok", "face_engine": "dummy", "embedding_dim": 128}
-    page = client.get("/app/camera.html")
-    assert page.status_code == 200 and "js/api.js" in page.text
     assert client.get("/", follow_redirects=False).headers["location"] == "/app/"
     r = client.options(
         "/rooms", headers={"Origin": "http://127.0.0.1:5500", "Access-Control-Request-Method": "GET"}
