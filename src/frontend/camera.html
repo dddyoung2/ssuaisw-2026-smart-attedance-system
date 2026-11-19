@@ -47,8 +47,14 @@
       <div class="flash" id="flash"></div>
     </div>
 
+    <!-- 지각 인정 시간: 촬영 시작 후 이 시간이 지나면 한 번 더 촬영한다 -->
+    <div class="late-select">
+      <label for="lateMin">지각 인정 시간 <span class="hint">촬영 시작 후</span></label>
+      <select id="lateMin"></select>
+    </div>
+
     <button class="btn full" type="button" id="shootBtn" disabled>촬영 시작</button>
-    <p class="shoot-info" id="shootInfo">촬영을 시작하면 1분마다 자동으로 출석을 확인해요.</p>
+    <p class="shoot-info" id="shootInfo">촬영을 시작하면 5분마다, 그리고 지각 인정 시간이 지났을 때 자동으로 출석을 확인해요.</p>
 
     <!-- 캡처용. 크기는 촬영할 때 카메라의 실제 해상도로 맞춘다 (camera.js) -->
     <canvas id="canvas" hidden></canvas>

@@ -4,10 +4,14 @@
 // 수업 회차는 앞 화면에서 정해져 URL(?lecture=)로 넘어온다.
 // 강의실: GET /rooms 목록, 기본값은 그 회차의 강의실. 다른 강의실을 골라도 DB 의 회차는 바꾸지 않는다.
 //         (강의실 카메라 연동은 추후 작업. 지금은 이 브라우저의 카메라로 찍는다)
-// 촬영 시작: POST /lectures/{id}/start → 즉시 1장 + 60초마다 POST /lectures/{id}/photos
+// 촬영 시작: POST /lectures/{id}/start → 즉시 1장 + 5분마다 POST /lectures/{id}/photos
+//          + 지각 인정 시간(촬영 시작 후 N분)이 지났을 때 1장 더
 
 /* ---------- 설정 ---------- */
-const INTERVAL_SEC = 60;     // 자동 촬영 주기(초)
+const INTERVAL_SEC = 300;    // 자동 촬영 주기(초) = 5분
+const LATE_MIN_MAX = 20;     // 지각 인정 시간 선택: 1~20분 (1분 단위)
+const LATE_MIN_DEFAULT = 10;
+const SAME_SHOT_SEC = 30;    // 정기 촬영과 지각 마감 촬영이 이 시간 안에 겹치면 마감 촬영 한 장만
 const JPEG_QUALITY = 0.92;   // 얼굴 인식을 위해 높은 화질 (원본 해상도 유지)
 
 // 카메라가 지원하는 가장 높은 해상도로 열기.
@@ -25,6 +29,7 @@ const roomPanel = document.getElementById('roomPanel');
 const roomSelect = document.getElementById('room');
 const roomValue = document.getElementById('roomValue');
 const roomMsg = document.getElementById('roomMsg');
+const lateSelect = document.getElementById('lateMin');
 
 const video = document.getElementById('video');
 const cameraMsg = document.getElementById('cameraMsg');
@@ -37,11 +42,30 @@ const flash = document.getElementById('flash');
 /* ---------- 상태 ---------- */
 const lectureId = requireLectureId();   // 없으면 과목 목록으로 이동
 let lecture = null;      // GET /lectures/{id}
-let timer = null;
+let timer = null;        // 정기 촬영 (5분마다)
+let lateTimer = null;    // 지각 마감 촬영 (한 번)
+let lateAt = 0;          // 지각 마감 시각 (ms)
+let lateState = '';      // '' | 'done' | 'fail'
 let starting = false;    // start 요청 중 (중복 클릭 방지)
 let count = 0;           // 업로드 성공한 사진 수
 let lastResult = '';
 let resolutionText = ''; // 카메라가 실제로 준 해상도 (예: 1920×1080)
+
+/* ---------- 지각 인정 시간 ---------- */
+for (let m = 1; m <= LATE_MIN_MAX; m++) lateSelect.add(new Option(`${m}분`, m));
+lateSelect.value = LATE_MIN_DEFAULT;
+
+function clockText(ms) {
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function lateText() {
+  if (!lateAt) return '';
+  if (lateState === 'done') return '지각 마감 사진 확인됨';
+  if (lateState === 'fail') return '지각 마감 사진 실패';
+  return `지각 마감 ${clockText(lateAt)}`;
+}
 
 /* ---------- 강의실 선택 ---------- */
 function setPanelOpen(open) {
@@ -100,8 +124,10 @@ async function startCamera() {
 
 /* ---------- 주기적 촬영 + 업로드 ---------- */
 function updateInfo(extra) {
+  const late = lateText();
   shootInfo.textContent =
-    `${count}장 확인됨 · ${INTERVAL_SEC}초마다 자동 촬영 중` +
+    `${count}장 확인됨 · ${INTERVAL_SEC / 60}분마다 자동 촬영 중` +
+    (late ? ` · ${late}` : '') +
     (resolutionText ? ` · ${resolutionText}` : '') +
     (lastResult ? ` · ${lastResult}` : '') +
     (extra ? ` · ${extra}` : '');
@@ -111,8 +137,9 @@ function canvasToBlob() {
   return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
 }
 
+// 한 장 찍어 업로드. 업로드에 성공하면 true.
 async function capture() {
-  if (!video.videoWidth) return;               // 카메라가 아직 준비 안 됨
+  if (!video.videoWidth) return false;         // 카메라가 아직 준비 안 됨
 
   // 캡처 크기 = 카메라가 실제로 보내는 프레임 크기 (축소하지 않음)
   const w = video.videoWidth;
@@ -130,7 +157,7 @@ async function capture() {
   flash.classList.add('go');
 
   const blob = await canvasToBlob();
-  if (!blob) return;
+  if (!blob) return false;
   const form = new FormData();
   form.append('photo', blob, 'capture.jpg');     // 파일명(확장자) 필수: 서버가 jpg/png 만 허용
 
@@ -142,9 +169,24 @@ async function capture() {
     const s = data.summary;
     lastResult = `얼굴 ${data.face_count}명 중 ${data.matched_count}명 인식, 출석 ${s.present}/${s.total}명`;
     updateInfo();
+    return true;
   } catch (e) {
     updateInfo(`실패: ${e.message}`);
+    return false;
   }
+}
+
+// 정기 촬영. 지각 마감 촬영과 겹치는 때(앞뒤 30초)는 마감 촬영이 대신 찍으므로 건너뛴다.
+function periodicCapture() {
+  if (lateAt && Math.abs(Date.now() - lateAt) < SAME_SHOT_SEC * 1000) return;
+  capture();
+}
+
+// 지각 인정 시간이 지났을 때 한 장
+async function lateCapture() {
+  lateTimer = null;
+  lateState = (await capture()) ? 'done' : 'fail';
+  if (timer) updateInfo();
 }
 
 async function startShooting() {
@@ -164,23 +206,34 @@ async function startShooting() {
     shootBtn.disabled = false;
   }
 
-  capture();                                   // 시작하자마자 1장
-  timer = setInterval(capture, INTERVAL_SEC * 1000);
+  // 지각 마감 = 촬영 시작 + 선택한 분 (DB 에 수업 시작 시간이 없어 촬영 시작을 기준으로 한다)
+  const lateMs = Number(lateSelect.value) * 60 * 1000;
+  lateAt = Date.now() + lateMs;
+  lateState = '';
+  lateTimer = setTimeout(lateCapture, lateMs);
+
+  timer = setInterval(periodicCapture, INTERVAL_SEC * 1000);
   shootBtn.textContent = '촬영 중지';
   shootBtn.classList.add('stop');
   recBadge.classList.add('on');
-  roomBtn.disabled = true;                     // 촬영 중에는 강의실 변경 막기
+  roomBtn.disabled = true;                     // 촬영 중에는 강의실·지각 인정 시간 변경 막기
+  lateSelect.disabled = true;
   setPanelOpen(false);
   updateInfo();
+  capture();                                   // 시작하자마자 1장
 }
 
 function stopShooting() {
   clearInterval(timer);
+  clearTimeout(lateTimer);
   timer = null;
+  lateTimer = null;
+  lateAt = 0;
   shootBtn.textContent = '촬영 시작';
   shootBtn.classList.remove('stop');
   recBadge.classList.remove('on');
   roomBtn.disabled = roomSelect.options.length < 2;
+  lateSelect.disabled = false;
   shootInfo.textContent = `촬영을 멈췄어요. 총 ${count}장으로 출석을 확인했어요.`;
 }
 

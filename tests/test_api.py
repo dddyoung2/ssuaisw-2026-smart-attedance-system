@@ -287,7 +287,7 @@ def test_old_apis_removed(client):
         ("/app/", "js/index.js", 'id="courseList"'),  # 첫 화면 = 과목 목록
         ("/app/course.html", "js/course.js", 'id="lectureList"'),
         ("/app/method.html", "js/method.js", 'id="eBtn"'),
-        ("/app/camera.html", "js/camera.js", 'id="shootBtn"'),
+        ("/app/camera.html", "js/camera.js", 'id="lateMin"'),  # 지각 인정 시간 선택
         ("/app/attendance.html", "js/attendance.js", 'id="studentList"'),
     ],
 )
@@ -298,6 +298,13 @@ def test_frontend_pages_served(client, path, script, marker):
     # 연결된 스크립트도 실제로 제공된다
     assert client.get("/app/js/api.js").status_code == 200
     assert client.get(f"/app/{script}").status_code == 200
+
+
+def test_camera_capture_settings(client):
+    """촬영 주기 5분, 지각 인정 시간 1~20분."""
+    js = client.get("/app/js/camera.js").text
+    assert "const INTERVAL_SEC = 300;" in js
+    assert "const LATE_MIN_MAX = 20;" in js and "for (let m = 1; m <= LATE_MIN_MAX; m++)" in js
 
 
 def test_frontend_no_removed_api_calls(client):
