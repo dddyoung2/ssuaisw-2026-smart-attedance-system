@@ -1,7 +1,5 @@
-"""시퀀스 ②~④ API 테스트 (더미 엔진, 임시 usaint DB)."""
+"""API 테스트: 과목·회차 조회, 회차 시작 → 사진 → 출결 현황 (더미 엔진, 임시 usaint DB)."""
 from __future__ import annotations
-
-import datetime as dt
 
 from sqlalchemy import inspect, select, update
 
@@ -20,46 +18,80 @@ from .conftest import (
 )
 
 
-# ---------- ② 강의실 · 회차 ----------
-def test_rooms(client, data):
-    assert client.get("/rooms").json() == [
-        {"room_no": "11101", "camera": None},
-        {"room_no": "21303", "camera": "cam-21303"},
+# ---------- 과목 목록 · 과목 홈(회차 목록) · 회차 정보 ----------
+def test_courses_sorted_by_name_with_lecture_count(client, data):
+    assert client.get("/courses").json() == [
+        {"course_code": "C1", "course_name": "알고리즘(가반)", "lecture_count": 3},
+        {"course_code": "C2", "course_name": "알고리즘(나반)", "lecture_count": 2},
+        {"course_code": "C0", "course_name": "자료구조", "lecture_count": 0},
     ]
 
 
-def test_find_lectures_zero_one_two(client, data):
-    def find(room, day):
-        r = client.get("/lectures", params={"room_no": room, "date": day.isoformat()})
-        assert r.status_code == 200
-        return r.json()
+def test_courses_empty_db(client):
+    assert client.get("/courses").json() == []
 
-    two = find("21303", D0)
-    assert [l["lecture_id"] for l in two] == [data.l1, data.l2]
-    assert two[0] == {
+
+def test_course_detail(client, data):
+    assert client.get("/courses/C1").json() == {"course_code": "C1", "course_name": "알고리즘(가반)"}
+
+
+def test_course_lectures_sorted_by_date_week_session(client, data):
+    body = client.get("/courses/C1/lectures").json()
+    # 추가된 순서(l1, l3, l5)가 아니라 수업일 순(l1, l5, l3)
+    assert [l["lecture_id"] for l in body] == [data.l1, data.l5, data.l3]
+    assert body[0] == {
         "lecture_id": data.l1,
-        "course_code": "C1",
-        "course_name": "알고리즘(가반)",
         "week": 10,
         "session_no": 1,
         "date": D0.isoformat(),
         "room_no": "21303",
     }
-    assert [l["lecture_id"] for l in find("11101", D0)] == [data.l4]
-    assert find("21303", D0 + dt.timedelta(days=1)) == []
-    assert find("99999", D0) == []
+    assert client.get("/courses/C0/lectures").json() == []
 
 
-def test_find_lectures_date_defaults_to_today(client, db):
-    db.add_all([Room(room_no="R9"), Course(course_code="CX", course_name="오늘 과목")])
+def test_course_lectures_same_date_sorted_by_week_then_session(client, db):
+    db.add_all([Room(room_no="R1"), Course(course_code="CX", course_name="과목")])
     db.flush()
-    db.add(Lecture(course_code="CX", room_no="R9", week=1, session_no=1, date=dt.date.today()))
+    db.add_all(
+        [
+            Lecture(course_code="CX", room_no="R1", week=2, session_no=1, date=D0),
+            Lecture(course_code="CX", room_no="R1", week=1, session_no=2, date=D0),
+            Lecture(course_code="CX", room_no="R1", week=1, session_no=1, date=D0),
+        ]
+    )
     db.commit()
-    assert [l["course_code"] for l in client.get("/lectures", params={"room_no": "R9"}).json()] == ["CX"]
+    body = client.get("/courses/CX/lectures").json()
+    assert [(l["week"], l["session_no"]) for l in body] == [(1, 1), (1, 2), (2, 1)]
 
 
-def test_find_lectures_requires_room(client):
-    assert client.get("/lectures").status_code == 422
+def test_unknown_course_is_404(client, data):
+    assert client.get("/courses/NOPE").status_code == 404
+    assert client.get("/courses/NOPE/lectures").status_code == 404
+
+
+def test_lecture_detail(client, data):
+    assert client.get(f"/lectures/{data.l2}").json() == {
+        "lecture_id": data.l2,
+        "course_code": "C2",
+        "course_name": "알고리즘(나반)",
+        "week": 10,
+        "session_no": 1,
+        "date": D0.isoformat(),
+        "room_no": "21303",
+    }
+
+
+def test_room_date_lecture_search_removed(client, data):
+    r = client.get("/lectures", params={"room_no": "21303", "date": D0.isoformat()})
+    assert r.status_code in (404, 405)
+
+
+# ---------- 강의실 · 회차 시작 ----------
+def test_rooms(client, data):
+    assert client.get("/rooms").json() == [
+        {"room_no": "11101", "camera": None},
+        {"room_no": "21303", "camera": "cam-21303"},
+    ]
 
 
 def test_start_creates_false_rows_for_enrolled_only(client, data, db):
@@ -178,6 +210,7 @@ def test_attendance_before_start_is_empty(client, data):
 
 # ---------- 오류 · 개인정보 ----------
 def test_unknown_lecture_is_404(client, data):
+    assert client.get("/lectures/9999").status_code == 404
     assert client.post("/lectures/9999/start").status_code == 404
     assert upload(client, 9999, classroom(1)).status_code == 404
     assert client.get("/lectures/9999/attendance").status_code == 404
@@ -226,7 +259,10 @@ def _has_number_vector(obj) -> bool:
 def test_responses_never_contain_embedding(client, data):
     responses = [
         client.get("/rooms"),
-        client.get("/lectures", params={"room_no": "21303", "date": D0.isoformat()}),
+        client.get("/courses"),
+        client.get("/courses/C1"),
+        client.get("/courses/C1/lectures"),
+        client.get(f"/lectures/{data.l1}"),
         client.post(f"/lectures/{data.l1}/start"),
         upload(client, data.l1, classroom(SEEDS["S1"])),
         client.get(f"/lectures/{data.l1}/attendance"),

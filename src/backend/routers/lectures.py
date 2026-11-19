@@ -1,9 +1,10 @@
-"""수업 회차: 조회(②), 시작(②), 사진 처리(③), 출결 현황(④)."""
+"""수업 회차: 정보, 시작, 사진 처리, 출결 현황.
+
+회차는 과목 홈(GET /courses/{code}/lectures)에서 먼저 고른다.
+"""
 from __future__ import annotations
 
-import datetime as dt
-
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from ..config import Settings
@@ -19,7 +20,7 @@ from ..schemas import (
     SummaryOut,
 )
 from ..services import attendance as att
-from ..services import storage, usaint
+from ..services import storage
 from ..services.usaint import LectureInfo
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
@@ -41,14 +42,9 @@ def _summary_out(s: att.Summary) -> SummaryOut:
     return SummaryOut(total=s.total, present=s.present, absent=s.absent)
 
 
-@router.get("", response_model=list[LectureOut], summary="강의실·날짜로 수업 회차 조회")
-def find_lectures(
-    room_no: str = Query(..., description="강의실 번호", examples=["21303"]),
-    date: dt.date | None = Query(None, description="수업 날짜 (생략하면 서버 기준 오늘)"),
-    db: Session = Depends(get_db),
-):
-    """시간 정보가 없어서 같은 강의실·같은 날에 회차가 여러 개일 수 있다. 0개면 빈 목록."""
-    return [_lecture_out(l) for l in usaint.find_lectures(db, room_no, date or dt.date.today())]
+@router.get("/{lecture_id}", response_model=LectureOut, summary="수업 회차 정보")
+def get_lecture(lecture: LectureInfo = Depends(get_lecture_or_404)):
+    return _lecture_out(lecture)
 
 
 @router.post("/{lecture_id}/start", response_model=StartOut, summary="회차 시작: 수강생 출석 행 준비")
