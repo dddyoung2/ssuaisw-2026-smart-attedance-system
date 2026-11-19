@@ -27,7 +27,7 @@ python main.py                     # 개발 중에는 python main.py --reload
 
 # 4) 화면 확인: http://127.0.0.1:8000/app/
 #    과목 목록 → [과목 홈 바로가기] → 오늘 회차(분홍색) [출결 확인]
-#    → [전자 출결] → [카메라] → [촬영 시작] → [출결 현황 보기]
+#    → [전자 출결] → [카메라] → 지각 인정 시간 선택 → [촬영 시작] → [출결 현황 보기]
 ```
 
 | 주소 | 내용 |
@@ -75,12 +75,13 @@ Python 3.10 이상이 필요합니다. Python 3.11(numpy 1.26.4)과 Python 3.14(
 | 1. 과목 목록 (첫 화면) | `index.html` | `GET /courses` | `course.html?course=<과목코드>` |
 | 2. 과목 홈 = 회차 목록 | `course.html` | `GET /courses/{code}`, `GET /courses/{code}/lectures` | [출결 확인] → `method.html?lecture=<id>` |
 | 3. 출결 방식 선택 | `method.html` | `GET /lectures/{id}` | [전자 출결] → [카메라] → `camera.html?lecture=<id>` |
-| 4. 카메라 | `camera.html` | `GET /lectures/{id}`, `GET /rooms`, 촬영 시작 시 `POST /lectures/{id}/start` → 즉시 1장 + 60초마다 `POST /lectures/{id}/photos` | [출결 현황 보기] → `attendance.html?lecture=<id>` |
+| 4. 카메라 | `camera.html` | `GET /lectures/{id}`, `GET /rooms`, 촬영 시작 시 `POST /lectures/{id}/start` → 즉시 1장 + **5분마다** + **지각 인정 시간이 지났을 때** 1장 `POST /lectures/{id}/photos` | [출결 현황 보기] → `attendance.html?lecture=<id>` |
 | 5. 출결 현황 | `attendance.html` | `GET /lectures/{id}/attendance` (10초마다) | – |
 
 - 선택한 회차는 URL 쿼리로 넘기고 localStorage에도 저장합니다. URL에 `lecture`가 없으면 마지막으로 고른 회차를 쓰고, 그것도 없으면 과목 목록으로 돌아갑니다.
 - "← 뒤로"는 바로 이전 단계로 갑니다(출결 현황 → 카메라 → 출결 방식 선택 → 그 회차의 과목 홈 → 과목 목록).
 - 과목 홈: 주차 칸은 `<week>-<session_no>` 배지, 수업일 칸은 `9/1 (화)`와 강의실 번호. [수업일순]/[주차순] 토글은 화면에서 정렬만 바꿉니다. 오늘 회차 행은 분홍색으로 강조하고 그 행으로 스크롤합니다.
+- 카메라 촬영 시점: [촬영 시작] 즉시 1장, 이후 5분마다 1장, 그리고 **지각 인정 시간**(촬영 시작 후 1~20분, 1분 단위, 기본 10분)이 지났을 때 1장을 더 찍습니다. DB에 수업 시작 시간이 없어서 촬영 시작을 기준으로 합니다. 정기 촬영과 30초 안에 겹치면(예: 10분) 한 장만 찍습니다. 예) 7분 → 0, 5, 7, 10, 15…분 / 10분 → 0, 5, 10, 15…분. 촬영 중에는 지각 인정 시간을 바꿀 수 없고, 촬영을 멈췄다가 다시 시작하면 그때부터 다시 계산합니다.
 - 카메라: 강의실 기본값은 그 회차의 강의실입니다. 다른 강의실을 골라도 DB의 회차는 바뀌지 않습니다(어느 카메라로 찍을지만 고르는 것, 강의실 카메라 연동은 추후 작업이라 지금은 브라우저 카메라로 촬영).
 - 수동·큐알·코드 출결은 "준비 중" 안내만 합니다.
 
@@ -111,10 +112,11 @@ class ─1:N────┘                              │
 | class (`Course`) | course_code(분반 포함), course_name | PK course_code |
 | student | student_id, name, photo_path, embedding(BLOB) | PK student_id |
 | enrollment | course_code, student_id | PK (course_code, student_id), FK → class·student **CASCADE** |
-| lecture | lecture_id(자동 증가), course_code, room_no, week, session_no, date | PK lecture_id, FK → class **CASCADE**, FK → room |
+| lecture | lecture_id(자동 증가), course_code, room_no, week, session_no, date, photo_path | PK lecture_id, FK → class **CASCADE**, FK → room |
 | attendance | lecture_id, student_id, present(기본 false) | PK (lecture_id, student_id), FK → lecture·student **CASCADE** |
 
-- 증명사진은 파일로 두고 `photo_path`(DATA_DIR 기준 상대경로)만 저장합니다.
+- 증명사진은 파일로 두고 `student.photo_path`(DATA_DIR 기준 상대경로)만 저장합니다.
+- `lecture.photo_path`는 FD 모델로 학생 얼굴에 박스를 친 수업 사진의 경로 자리입니다. **컬럼만 추가했고 아직 저장하는 코드는 없어서 항상 NULL**입니다. 테이블이 바뀌었으므로 기존 `usaint.db`는 seed를 다시 실행해 새로 만들어야 합니다.
 - `embedding`은 "증명사진에서 미리 추출해 넣어 둔 값"(float32 배열 → bytes)입니다. NULL인 학생은 매칭에서 제외됩니다.
 - `Course.students`는 enrollment를 거쳐 수강생 목록을 바로 가져오는 조회용 relationship입니다.
 - SQLite에서 FK가 동작하도록 연결할 때마다 `PRAGMA foreign_keys=ON`을 실행합니다.
@@ -182,7 +184,8 @@ src/frontend/
 
 - **DB에 없어 표시하지 않는 항목**: 학기, 교수명(과목 카드), 수업 시간, 건물 이름(회차 목록), LMS의 동영상·화상강의·과제·퀴즈·토론·공지 수. 화면에는 DB에 있는 값(과목명·코드, 회차 수, 주차-차수, 날짜, 강의실 번호)만 보여 줍니다.
 - **카메라 연동 전**: `room.camera`(카메라 연결 정보)는 아직 쓰지 않고, 브라우저가 연결된 카메라로 촬영합니다. 카메라 화면에서 고른 강의실은 표시용입니다.
-- **사진 미저장**: 업로드 사진은 메모리에서 처리한 뒤 버립니다. 나중에 인식 결과를 다시 확인하거나 재처리할 수 없습니다.
+- **사진 미저장**: 업로드 사진은 메모리에서 처리한 뒤 버립니다. 나중에 인식 결과를 다시 확인하거나 재처리할 수 없습니다. (`lecture.photo_path`에 박스 친 사진을 저장하는 기능은 추후 작업. 한 회차에 사진이 여러 장 찍히므로 어느 사진을 남길지, 보관 기간을 정해야 합니다.)
+- **지각 구분 없음**: 지각 인정 시간이 지난 뒤 처음 인식된 학생도 `present=true`(출석)로 기록됩니다. DB에 지각 상태가 없습니다.
 - **수동 수정 없음**: 교수가 출석을 직접 고치는 API는 없습니다. 인식되지 않은 학생은 결석으로 남습니다.
 - **수강 명단 기준**: 수강생만 비교하므로, 등록되지 않은 사람이나 다른 분반 학생은 매칭되지 않습니다(의도한 동작).
 - 더미 엔진은 실제 얼굴을 인식하지 못합니다. 실제 모델(RetinaFace + FR 모델)을 연결해야 웹캠 사진으로 출석이 잡힙니다.
