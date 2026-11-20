@@ -86,7 +86,7 @@ ssuaisw-2026-smart-attedance-system/
 │  │  │  ├─retinaface                 # RetinaFace 모델 코드(MIT), weight/ 가중치 위치
 │  │  │  ├─detector.py                # 검출: 박스·5점 랜드마크
 │  │  │  ├─align.py                   # 정렬·크롭 (CelebA-HQ 방식, 리사이즈 없음)
-│  │  │  └─pipeline.py                # 인식 인계 출력 (박스 좌표·정렬 이미지 리스트)
+│  │  │  └─fd_pipeline.py             # 검출 → 정렬, 인식 인계 출력 (박스 좌표·정렬 이미지 리스트)
 │  │  ├─routers                       # API: 과목·회차 목록(courses), 회차 시작·사진·출결(lectures), 강의실(rooms)
 │  │  ├─services                      # 출석 처리, 1:1 매칭, usaint DB 조회, 업로드 검증
 │  │  └─scripts                       # 학생 임베딩 계산(compute_embeddings), 예시 DB 생성(seed_usaint)
@@ -144,6 +144,8 @@ python main.py
 | http://127.0.0.1:8000/app/ | 출결 화면 (첫 화면: 과목 목록) |
 | http://127.0.0.1:8000/docs | API 문서 (Swagger UI) |
 
+기본 얼굴 엔진(`FACE_ENGINE=retinaface`)은 검출 가중치가 있어야 동작합니다. 가중치 없이, 또는 예시 데이터(합성 사진)로 확인할 때는 `.env`에 `FACE_ENGINE=dummy`를 지정하세요.
+
 자세한 실행 순서와 예시 데이터는 [src/backend/README.md](src/backend/README.md)를 참고하세요.
 
 ---
@@ -166,7 +168,7 @@ python -m pytest
 DB_URL=
 DATA_DIR=src/backend/data
 CORS_ORIGINS=http://127.0.0.1:5500,http://localhost:5500
-FACE_ENGINE=dummy
+FACE_ENGINE=retinaface
 THRESHOLD=0.5
 MAX_UPLOAD_MB=10
 LOG_LEVEL=INFO
