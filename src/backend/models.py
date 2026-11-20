@@ -1,111 +1,108 @@
-"""ORM 모델 (SQLAlchemy 2.0).
+"""usaint DB 모델 (SQLAlchemy 2.0).
 
-- 이미지는 파일로 저장하고 DB에는 data_dir 기준 상대경로(posix 형식)만 저장한다.
+usaint(숭실대 학사 포털) DB 에 이미 있는 학생·과목·강의실·회차·수강 정보를 흉내 낸다.
+우리 시스템은 이 DB 를 읽고, 출석 결과(attendance)만 쓴다.
+
+    room ─1:N─ lecture ─1:N─ attendance ─N:1─ student
+                  │                              │
+    class ─1:N────┘                              │
+      └──────1:N── enrollment ──N:1──────────────┘
+
+- 테이블 6개, 명세에 있는 컬럼만 둔다(사진 테이블 없음: 업로드 사진은 저장하지 않음).
+- 증명사진은 파일로 두고 student.photo_path 에 경로만 저장한다.
 - 임베딩은 float32 numpy 배열을 tobytes() 한 BLOB.
-- 시간은 UTC.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import datetime as dt
 
 from sqlalchemy import (
     Boolean,
-    DateTime,
-    Float,
+    Date,
     ForeignKey,
     Integer,
     LargeBinary,
     String,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
 
 
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+class Room(Base):
+    __tablename__ = "room"
+
+    room_no: Mapped[str] = mapped_column(String(20), primary_key=True)  # 예: "21303"
+    camera: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    lectures: Mapped[list[Lecture]] = relationship(back_populates="room")
+
+
+class Course(Base):
+    """과목(분반 포함). 테이블 이름은 class, 파이썬 예약어를 피해 클래스 이름은 Course."""
+
+    __tablename__ = "class"
+
+    course_code: Mapped[str] = mapped_column(String(20), primary_key=True)  # 예: "2150163301"
+    course_name: Mapped[str] = mapped_column(String(100))
+
+    # 수강생 목록 바로가기 (enrollment 를 거침, 조회 전용)
+    students: Mapped[list[Student]] = relationship(
+        secondary="enrollment", viewonly=True, order_by="Student.student_id"
+    )
+    lectures: Mapped[list[Lecture]] = relationship(
+        back_populates="course", passive_deletes=True
+    )
 
 
 class Student(Base):
-    __tablename__ = "students"
+    __tablename__ = "student"
 
     student_id: Mapped[str] = mapped_column(String(20), primary_key=True)
     name: Mapped[str] = mapped_column(String(50))
-    photo_path: Mapped[str] = mapped_column(String(255))
+    photo_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class ClassSession(Base):
-    """수업 회차. (SQLAlchemy Session 과 이름이 겹치지 않도록 ClassSession)"""
+class Enrollment(Base):
+    """수강 정보: 과목 × 학생 한 쌍이 한 줄."""
 
-    __tablename__ = "sessions"
+    __tablename__ = "enrollment"
 
-    session_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    course_name: Mapped[str] = mapped_column(String(100))
-    room: Mapped[str] = mapped_column(String(100))
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-    photos: Mapped[list[SessionPhoto]] = relationship(
-        back_populates="session", cascade="all, delete-orphan", passive_deletes=True
+    course_code: Mapped[str] = mapped_column(
+        ForeignKey("class.course_code", ondelete="CASCADE"), primary_key=True
+    )
+    student_id: Mapped[str] = mapped_column(
+        ForeignKey("student.student_id", ondelete="CASCADE"), primary_key=True
     )
 
 
-class SessionPhoto(Base):
-    __tablename__ = "session_photos"
+class Lecture(Base):
+    """수업 회차. 시간 컬럼이 없어서 같은 강의실·같은 날에 여러 회차가 있을 수 있다."""
 
-    photo_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(
-        ForeignKey("sessions.session_id", ondelete="CASCADE"), index=True
+    __tablename__ = "lecture"
+
+    lecture_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    course_code: Mapped[str] = mapped_column(
+        ForeignKey("class.course_code", ondelete="CASCADE"), index=True
     )
-    photo_path: Mapped[str] = mapped_column(String(255))
-    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    room_no: Mapped[str] = mapped_column(ForeignKey("room.room_no"), index=True)
+    week: Mapped[int] = mapped_column(Integer)  # 주차
+    session_no: Mapped[int] = mapped_column(Integer)  # 그 주의 몇 번째 수업인지
+    date: Mapped[dt.date] = mapped_column(Date, index=True)
 
-    session: Mapped[ClassSession] = relationship(back_populates="photos")
-    detections: Mapped[list[Detection]] = relationship(
-        back_populates="photo", cascade="all, delete-orphan", passive_deletes=True
-    )
-
-
-class Detection(Base):
-    __tablename__ = "detections"
-
-    detection_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    photo_id: Mapped[int] = mapped_column(
-        ForeignKey("session_photos.photo_id", ondelete="CASCADE"), index=True
-    )
-    bbox_x: Mapped[int] = mapped_column(Integer)
-    bbox_y: Mapped[int] = mapped_column(Integer)
-    bbox_w: Mapped[int] = mapped_column(Integer)
-    bbox_h: Mapped[int] = mapped_column(Integer)
-    embedding: Mapped[bytes] = mapped_column(LargeBinary)
-    matched_student_id: Mapped[str | None] = mapped_column(
-        ForeignKey("students.student_id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    # 매칭 실패여도 "가장 가까운 학생과의 유사도"는 기록해 둔다(교수 확인 참고용).
-    similarity: Mapped[float | None] = mapped_column(Float, nullable=True)
-    verified: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    photo: Mapped[SessionPhoto] = relationship(back_populates="detections")
-    matched_student: Mapped[Student | None] = relationship()
-
-    @property
-    def bbox(self) -> tuple[int, int, int, int]:
-        return (self.bbox_x, self.bbox_y, self.bbox_w, self.bbox_h)
+    course: Mapped[Course] = relationship(back_populates="lectures")
+    room: Mapped[Room] = relationship(back_populates="lectures")
 
 
 class Attendance(Base):
     __tablename__ = "attendance"
 
-    session_id: Mapped[int] = mapped_column(
-        ForeignKey("sessions.session_id", ondelete="CASCADE"), primary_key=True
+    lecture_id: Mapped[int] = mapped_column(
+        ForeignKey("lecture.lecture_id", ondelete="CASCADE"), primary_key=True
     )
     student_id: Mapped[str] = mapped_column(
-        ForeignKey("students.student_id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("student.student_id", ondelete="CASCADE"), primary_key=True
     )
-    status: Mapped[str] = mapped_column(String(10))  # present / absent
-    # auto: 얼굴 인식 결과로 계산 / manual: 교수가 직접 지정(재계산 시 유지)
-    source: Mapped[str] = mapped_column(String(10), default="auto")
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow
-    )
+    present: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())

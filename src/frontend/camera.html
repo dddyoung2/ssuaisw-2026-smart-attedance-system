@@ -15,37 +15,35 @@
       <a href="attendance.html">출결 현황 보기</a>
     </div>
 
-    <!-- 강의실 선택 -->
+    <!-- 강의실·카메라 선택 → 오늘 수업 회차 확인 -->
     <section class="room-select">
       <div class="room-head">
         <div>
-          <div class="label" id="roomLabel">기본 · 배정 강의실</div>
-          <div class="value" id="roomValue">공학관 3층 301호</div>
+          <div class="label" id="roomLabel">강의실 · 수업</div>
+          <div class="value" id="roomValue">강의실을 선택해 주세요</div>
         </div>
-        <button class="btn" type="button" id="roomBtn" aria-expanded="false">강의실 선택</button>
+        <button class="btn" type="button" id="roomBtn" aria-expanded="true">강의실 선택</button>
       </div>
 
-      <div class="room-panel" id="roomPanel">
-        <div class="fields">
+      <div class="room-panel open" id="roomPanel">
+        <div class="fields single">
           <div>
-            <label for="building">건물</label>
-            <select id="building">
-              <option>공학관</option>
-              <option>인문관</option>
-              <option>과학관</option>
-              <option>경영관</option>
-            </select>
-          </div>
-          <div>
-            <label for="floor">층</label>
-            <select id="floor"></select>
-          </div>
-          <div>
-            <label for="room">강의실</label>
+            <label for="room">강의실 · 카메라</label>
             <select id="room"></select>
           </div>
         </div>
-        <button class="btn full" type="button" id="applyRoom">이 강의실 카메라로 연결</button>
+        <button class="btn full" type="button" id="findLecture">오늘 수업 찾기</button>
+
+        <!-- 같은 강의실·같은 날에 수업이 여러 개면 교수가 고른다 -->
+        <div class="fields single lecture-pick" id="lecturePick" hidden>
+          <div>
+            <label for="lecture">오늘 이 강의실의 수업</label>
+            <select id="lecture"></select>
+          </div>
+          <button class="btn full" type="button" id="applyLecture">이 수업으로 출결 시작</button>
+        </div>
+
+        <p class="room-msg" id="roomMsg" role="status"></p>
       </div>
     </section>
 
@@ -57,10 +55,11 @@
       <div class="flash" id="flash"></div>
     </div>
 
-    <button class="btn full" type="button" id="shootBtn">촬영 시작</button>
-    <p class="shoot-info" id="shootInfo">촬영을 시작하면 1분마다 자동으로 사진을 서버에 올려 출석을 확인해요.</p>
+    <button class="btn full" type="button" id="shootBtn" disabled>촬영 시작</button>
+    <p class="shoot-info" id="shootInfo">수업을 고르면 촬영을 시작할 수 있어요. 촬영하면 1분마다 자동으로 출석을 확인해요.</p>
 
-    <canvas id="canvas" width="640" height="480" hidden></canvas>
+    <!-- 캡처용. 크기는 촬영할 때 카메라의 실제 해상도로 맞춘다 (camera.js) -->
+    <canvas id="canvas" hidden></canvas>
   </main>
 </body>
 </html>

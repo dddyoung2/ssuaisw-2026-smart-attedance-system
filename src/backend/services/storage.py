@@ -1,12 +1,10 @@
-"""업로드 검증과 이미지 파일 저장/삭제.
+"""업로드 검증과 이미지 디코딩.
 
-DB 에는 data_dir 기준 상대경로(posix)만 저장하므로 OS 가 바뀌어도 그대로 쓸 수 있다.
+업로드된 강의실 사진은 메모리에서만 다룬다(파일로 저장하지 않음).
+디스크에서 읽는 것은 학생 증명사진(student.photo_path, data_dir 기준 상대경로)뿐이다.
 """
 from __future__ import annotations
 
-import logging
-import uuid
-from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 
@@ -16,16 +14,13 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from ..config import Settings
 
-logger = logging.getLogger(__name__)
-
 ALLOWED_EXT = {".jpg", ".jpeg", ".png"}
 _CONTENT_TYPE_EXT = {"image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png"}
-_FORMAT_EXT = {"JPEG": ".jpg", "PNG": ".png"}
-MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+_ALLOWED_FORMATS = {"JPEG", "PNG"}
 
 
-def read_upload(upload: UploadFile, settings: Settings) -> tuple[bytes, str]:
-    """확장자·크기·실제 이미지 형식을 검사하고 (bytes, 저장용 확장자)를 돌려준다."""
+def read_upload(upload: UploadFile, settings: Settings) -> bytes:
+    """확장자·크기·실제 이미지 형식을 검사하고 파일 내용(bytes)을 돌려준다."""
     ext = Path(upload.filename or "").suffix.lower()
     if not ext:
         ext = _CONTENT_TYPE_EXT.get((upload.content_type or "").lower(), "")
@@ -45,20 +40,16 @@ def read_upload(upload: UploadFile, settings: Settings) -> tuple[bytes, str]:
             im.verify()
     except (UnidentifiedImageError, OSError, SyntaxError):
         raise HTTPException(400, "이미지 파일을 읽을 수 없습니다.") from None
-    if fmt not in _FORMAT_EXT:
+    if fmt not in _ALLOWED_FORMATS:
         raise HTTPException(415, "jpg, jpeg, png 파일만 업로드할 수 있습니다.")
-    return data, _FORMAT_EXT[fmt]
+    return data
 
 
 def decode_image(data: bytes) -> np.ndarray:
-    """bytes → RGB uint8 (H, W, 3). EXIF 회전 정보를 반영한다."""
+    """bytes → RGB uint8 (H, W, 3). EXIF 회전 정보를 반영한다. 메모리에서만 처리."""
     with Image.open(BytesIO(data)) as im:
         im = ImageOps.exif_transpose(im)
         return np.asarray(im.convert("RGB"), dtype=np.uint8)
-
-
-def load_image(settings: Settings, rel_path: str) -> np.ndarray:
-    return decode_image(abs_path(settings, rel_path).read_bytes())
 
 
 def abs_path(settings: Settings, rel_path: str) -> Path:
@@ -68,34 +59,6 @@ def abs_path(settings: Settings, rel_path: str) -> Path:
     return path
 
 
-def _save(settings: Settings, rel_path: Path, data: bytes) -> str:
-    target = settings.data_dir / rel_path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_bytes(data)
-    tmp.replace(target)
-    return rel_path.as_posix()
-
-
-def save_student_photo(settings: Settings, student_id: str, data: bytes, ext: str) -> str:
-    name = f"{student_id}_{uuid.uuid4().hex[:8]}{ext}"
-    return _save(settings, Path("photos", "students", name), data)
-
-
-def save_session_photo(settings: Settings, session_id: int, data: bytes, ext: str) -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    name = f"{stamp}_{uuid.uuid4().hex[:8]}{ext}"
-    return _save(settings, Path("photos", "sessions", str(session_id), name), data)
-
-
-def delete_file(settings: Settings, rel_path: str | None) -> None:
-    if not rel_path:
-        return
-    try:
-        abs_path(settings, rel_path).unlink(missing_ok=True)
-    except OSError as e:
-        logger.warning("파일 삭제 실패 %s: %s", rel_path, e)
-
-
-def media_type_of(rel_path: str) -> str:
-    return MEDIA_TYPES.get(Path(rel_path).suffix.lower(), "application/octet-stream")
+def load_image(settings: Settings, rel_path: str) -> np.ndarray:
+    """학생 증명사진 읽기 (data_dir 기준 상대경로)."""
+    return decode_image(abs_path(settings, rel_path).read_bytes())

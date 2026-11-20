@@ -190,6 +190,12 @@ select {
 .flash.go { animation: flash .35s; }
 @keyframes flash { 0% { opacity: .7; } 100% { opacity: 0; } }
 
+.room-panel .fields.single { grid-template-columns: 1fr; }
+.lecture-pick { margin-top: 14px; margin-bottom: 0; }
+.room-msg { font-size: 14px; color: var(--ink-sub); margin-top: 10px; }
+.room-msg:empty { display: none; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
 .shoot-info { text-align: center; font-size: 14px; color: var(--ink-sub); margin: 12px 0 20px; }
 .btn.stop { background: var(--absent); color: #fff; }
 
@@ -225,6 +231,7 @@ td.status, th.status { text-align: center; width: 110px; }
   border-radius: 20px;
   cursor: pointer;
 }
+span.badge { display: inline-block; cursor: default; }
 .badge.present { background: var(--main); color: #0F3B42; }
 .badge.absent { background: #FBE3E3; color: #B54141; }
 
