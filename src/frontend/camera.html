@@ -11,40 +11,32 @@
 <body>
   <main class="page">
     <div class="top-bar">
-      <a href="index.html">← 뒤로</a>
-      <a href="attendance.html">출결 현황 보기</a>
+      <a href="method.html" id="backLink">← 뒤로</a>
+      <a href="attendance.html" id="attendanceLink">출결 현황 보기</a>
     </div>
 
-    <!-- 강의실·카메라 선택 → 오늘 수업 회차 확인 -->
+    <p class="lecture-info" id="lectureInfo">수업 정보를 불러오는 중…</p>
+
+    <!-- 강의실 선택: 어느 강의실 카메라로 찍을지만 고른다 (DB 의 수업 정보는 바꾸지 않음) -->
     <section class="room-select">
       <div class="room-head">
         <div>
-          <div class="label" id="roomLabel">강의실 · 수업</div>
-          <div class="value" id="roomValue">강의실을 선택해 주세요</div>
+          <div class="label">촬영 강의실</div>
+          <div class="value" id="roomValue">-</div>
         </div>
-        <button class="btn" type="button" id="roomBtn" aria-expanded="true">강의실 선택</button>
+        <button class="btn" type="button" id="roomBtn" aria-expanded="false" aria-controls="roomPanel">강의실 변경</button>
       </div>
 
-      <div class="room-panel open" id="roomPanel">
+      <div class="room-panel" id="roomPanel">
         <div class="fields single">
           <div>
-            <label for="room">강의실 · 카메라</label>
+            <label for="room">강의실</label>
             <select id="room"></select>
           </div>
         </div>
-        <button class="btn full" type="button" id="findLecture">오늘 수업 찾기</button>
-
-        <!-- 같은 강의실·같은 날에 수업이 여러 개면 교수가 고른다 -->
-        <div class="fields single lecture-pick" id="lecturePick" hidden>
-          <div>
-            <label for="lecture">오늘 이 강의실의 수업</label>
-            <select id="lecture"></select>
-          </div>
-          <button class="btn full" type="button" id="applyLecture">이 수업으로 출결 시작</button>
-        </div>
-
-        <p class="room-msg" id="roomMsg" role="status"></p>
       </div>
+
+      <p class="room-msg" id="roomMsg" role="status"></p>
     </section>
 
     <!-- 카메라 화면 -->
@@ -55,8 +47,14 @@
       <div class="flash" id="flash"></div>
     </div>
 
+    <!-- 지각 인정 시간: 촬영 시작 후 이 시간이 지나면 한 번 더 촬영한다 -->
+    <div class="late-select">
+      <label for="lateMin">지각 인정 시간 <span class="hint">촬영 시작 후</span></label>
+      <select id="lateMin"></select>
+    </div>
+
     <button class="btn full" type="button" id="shootBtn" disabled>촬영 시작</button>
-    <p class="shoot-info" id="shootInfo">수업을 고르면 촬영을 시작할 수 있어요. 촬영하면 1분마다 자동으로 출석을 확인해요.</p>
+    <p class="shoot-info" id="shootInfo">촬영을 시작하면 5분마다, 그리고 지각 인정 시간이 지났을 때 자동으로 출석을 확인해요.</p>
 
     <!-- 캡처용. 크기는 촬영할 때 카메라의 실제 해상도로 맞춘다 (camera.js) -->
     <canvas id="canvas" hidden></canvas>

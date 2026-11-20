@@ -1,8 +1,7 @@
-"""시퀀스 ②~④ API 테스트 (더미 엔진, 임시 usaint DB)."""
+"""API 테스트: 과목·회차 조회, 회차 시작 → 사진 → 출결 현황 (더미 엔진, 임시 usaint DB)."""
 from __future__ import annotations
 
-import datetime as dt
-
+import pytest
 from sqlalchemy import inspect, select, update
 
 from backend.models import Attendance, Course, Lecture, Room, Student
@@ -20,46 +19,80 @@ from .conftest import (
 )
 
 
-# ---------- ② 강의실 · 회차 ----------
-def test_rooms(client, data):
-    assert client.get("/rooms").json() == [
-        {"room_no": "11101", "camera": None},
-        {"room_no": "21303", "camera": "cam-21303"},
+# ---------- 과목 목록 · 과목 홈(회차 목록) · 회차 정보 ----------
+def test_courses_sorted_by_name_with_lecture_count(client, data):
+    assert client.get("/courses").json() == [
+        {"course_code": "C1", "course_name": "알고리즘(가반)", "lecture_count": 3},
+        {"course_code": "C2", "course_name": "알고리즘(나반)", "lecture_count": 2},
+        {"course_code": "C0", "course_name": "자료구조", "lecture_count": 0},
     ]
 
 
-def test_find_lectures_zero_one_two(client, data):
-    def find(room, day):
-        r = client.get("/lectures", params={"room_no": room, "date": day.isoformat()})
-        assert r.status_code == 200
-        return r.json()
+def test_courses_empty_db(client):
+    assert client.get("/courses").json() == []
 
-    two = find("21303", D0)
-    assert [l["lecture_id"] for l in two] == [data.l1, data.l2]
-    assert two[0] == {
+
+def test_course_detail(client, data):
+    assert client.get("/courses/C1").json() == {"course_code": "C1", "course_name": "알고리즘(가반)"}
+
+
+def test_course_lectures_sorted_by_date_week_session(client, data):
+    body = client.get("/courses/C1/lectures").json()
+    # 추가된 순서(l1, l3, l5)가 아니라 수업일 순(l1, l5, l3)
+    assert [l["lecture_id"] for l in body] == [data.l1, data.l5, data.l3]
+    assert body[0] == {
         "lecture_id": data.l1,
-        "course_code": "C1",
-        "course_name": "알고리즘(가반)",
         "week": 10,
         "session_no": 1,
         "date": D0.isoformat(),
         "room_no": "21303",
     }
-    assert [l["lecture_id"] for l in find("11101", D0)] == [data.l4]
-    assert find("21303", D0 + dt.timedelta(days=1)) == []
-    assert find("99999", D0) == []
+    assert client.get("/courses/C0/lectures").json() == []
 
 
-def test_find_lectures_date_defaults_to_today(client, db):
-    db.add_all([Room(room_no="R9"), Course(course_code="CX", course_name="오늘 과목")])
+def test_course_lectures_same_date_sorted_by_week_then_session(client, db):
+    db.add_all([Room(room_no="R1"), Course(course_code="CX", course_name="과목")])
     db.flush()
-    db.add(Lecture(course_code="CX", room_no="R9", week=1, session_no=1, date=dt.date.today()))
+    db.add_all(
+        [
+            Lecture(course_code="CX", room_no="R1", week=2, session_no=1, date=D0),
+            Lecture(course_code="CX", room_no="R1", week=1, session_no=2, date=D0),
+            Lecture(course_code="CX", room_no="R1", week=1, session_no=1, date=D0),
+        ]
+    )
     db.commit()
-    assert [l["course_code"] for l in client.get("/lectures", params={"room_no": "R9"}).json()] == ["CX"]
+    body = client.get("/courses/CX/lectures").json()
+    assert [(l["week"], l["session_no"]) for l in body] == [(1, 1), (1, 2), (2, 1)]
 
 
-def test_find_lectures_requires_room(client):
-    assert client.get("/lectures").status_code == 422
+def test_unknown_course_is_404(client, data):
+    assert client.get("/courses/NOPE").status_code == 404
+    assert client.get("/courses/NOPE/lectures").status_code == 404
+
+
+def test_lecture_detail(client, data):
+    assert client.get(f"/lectures/{data.l2}").json() == {
+        "lecture_id": data.l2,
+        "course_code": "C2",
+        "course_name": "알고리즘(나반)",
+        "week": 10,
+        "session_no": 1,
+        "date": D0.isoformat(),
+        "room_no": "21303",
+    }
+
+
+def test_room_date_lecture_search_removed(client, data):
+    r = client.get("/lectures", params={"room_no": "21303", "date": D0.isoformat()})
+    assert r.status_code in (404, 405)
+
+
+# ---------- 강의실 · 회차 시작 ----------
+def test_rooms(client, data):
+    assert client.get("/rooms").json() == [
+        {"room_no": "11101", "camera": None},
+        {"room_no": "21303", "camera": "cam-21303"},
+    ]
 
 
 def test_start_creates_false_rows_for_enrolled_only(client, data, db):
@@ -178,6 +211,7 @@ def test_attendance_before_start_is_empty(client, data):
 
 # ---------- 오류 · 개인정보 ----------
 def test_unknown_lecture_is_404(client, data):
+    assert client.get("/lectures/9999").status_code == 404
     assert client.post("/lectures/9999/start").status_code == 404
     assert upload(client, 9999, classroom(1)).status_code == 404
     assert client.get("/lectures/9999/attendance").status_code == 404
@@ -226,7 +260,10 @@ def _has_number_vector(obj) -> bool:
 def test_responses_never_contain_embedding(client, data):
     responses = [
         client.get("/rooms"),
-        client.get("/lectures", params={"room_no": "21303", "date": D0.isoformat()}),
+        client.get("/courses"),
+        client.get("/courses/C1"),
+        client.get("/courses/C1/lectures"),
+        client.get(f"/lectures/{data.l1}"),
         client.post(f"/lectures/{data.l1}/start"),
         upload(client, data.l1, classroom(SEEDS["S1"])),
         client.get(f"/lectures/{data.l1}/attendance"),
@@ -244,10 +281,41 @@ def test_old_apis_removed(client):
         assert client.get(path).status_code == 404
 
 
+@pytest.mark.parametrize(
+    "path, script, marker",
+    [
+        ("/app/", "js/index.js", 'id="courseList"'),  # 첫 화면 = 과목 목록
+        ("/app/course.html", "js/course.js", 'id="lectureList"'),
+        ("/app/method.html", "js/method.js", 'id="eBtn"'),
+        ("/app/camera.html", "js/camera.js", 'id="lateMin"'),  # 지각 인정 시간 선택
+        ("/app/attendance.html", "js/attendance.js", 'id="studentList"'),
+    ],
+)
+def test_frontend_pages_served(client, path, script, marker):
+    page = client.get(path)
+    assert page.status_code == 200
+    assert 'src="js/api.js"' in page.text and f'src="{script}"' in page.text and marker in page.text
+    # 연결된 스크립트도 실제로 제공된다
+    assert client.get("/app/js/api.js").status_code == 200
+    assert client.get(f"/app/{script}").status_code == 200
+
+
+def test_camera_capture_settings(client):
+    """촬영 주기 5분, 지각 인정 시간 1~20분."""
+    js = client.get("/app/js/camera.js").text
+    assert "const INTERVAL_SEC = 300;" in js
+    assert "const LATE_MIN_MAX = 20;" in js and "for (let m = 1; m <= LATE_MIN_MAX; m++)" in js
+
+
+def test_frontend_no_removed_api_calls(client):
+    """프론트엔드가 삭제된 API(강의실+날짜 회차 조회, /sessions)를 부르지 않는다."""
+    for script in ("api", "index", "course", "method", "camera", "attendance"):
+        js = client.get(f"/app/js/{script}.js").text
+        assert "/lectures?room_no" not in js and "/sessions" not in js, script
+
+
 def test_health_frontend_and_cors(client):
     assert client.get("/health").json() == {"status": "ok", "face_engine": "dummy", "embedding_dim": 128}
-    page = client.get("/app/camera.html")
-    assert page.status_code == 200 and "js/api.js" in page.text
     assert client.get("/", follow_redirects=False).headers["location"] == "/app/"
     r = client.options(
         "/rooms", headers={"Origin": "http://127.0.0.1:5500", "Access-Control-Request-Method": "GET"}

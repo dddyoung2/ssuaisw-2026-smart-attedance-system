@@ -70,8 +70,97 @@ h2 { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
 .btn.outline:hover { background: var(--main-soft); color: #0F3B42; }
 
 .btn.full { width: 100%; }
+.btn.small { padding: 8px 14px; font-size: 14px; border-radius: 10px; }
 
-/* ===== 1페이지: 출결 방식 선택 ===== */
+/* 선택된 수업 정보 한 줄 (출결 방식 · 카메라 · 출결 현황) */
+.lecture-info {
+  background: var(--main-soft);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 24px;
+  word-break: keep-all;
+}
+.lecture-info.error { background: #FBE3E3; color: #B54141; font-weight: 400; }
+
+/* ===== 1. 과목 목록 ===== */
+.course-list { list-style: none; margin-top: 24px; display: grid; gap: 12px; }
+.course-card {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 20px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  padding: 18px 20px;
+}
+.course-title { font-size: 18px; margin: 0; word-break: keep-all; }
+.course-title .code { font-weight: 400; color: var(--ink-sub); font-size: 15px; white-space: nowrap; }
+.course-stat { text-align: center; min-width: 88px; }
+.course-stat strong { display: block; font-size: 20px; color: var(--main-dark); }
+.course-stat span { font-size: 13px; color: var(--ink-sub); }
+.course-go { padding: 10px 16px; font-size: 14px; white-space: nowrap; }
+.list-msg { color: var(--ink-sub); font-size: 14px; margin-top: 16px; }
+.list-msg:empty { display: none; }
+
+/* ===== 2. 과목 홈: 회차 목록 ===== */
+.course-name { color: var(--ink-sub); font-size: 15px; font-weight: 700; margin-bottom: 6px; word-break: keep-all; }
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+/* 정렬 토글 [수업일순][주차순] */
+.seg { display: inline-flex; border: 2px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button {
+  border: none;
+  background: #fff;
+  color: var(--ink-sub);
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.seg button + button { border-left: 2px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--main-dark); color: #fff; font-weight: 700; }
+.seg button:focus-visible { outline: 3px solid var(--ink); outline-offset: -3px; }
+
+.lecture-table th.week, .lecture-table td.week { width: 80px; }
+.lecture-table th.action, .lecture-table td.action { text-align: right; width: 120px; }
+.lecture-table td { vertical-align: middle; }
+.lecture-table tr.today td { background: #FCEAF1; }
+.week-badge {
+  display: inline-block;
+  min-width: 48px;
+  text-align: center;
+  background: #E3EAEB;
+  color: #3E5054;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+.lec-date { font-weight: 700; }
+.lec-room { font-size: 13px; color: var(--ink-sub); margin-top: 2px; }
+.today-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 12px;
+  color: #B0406B;
+  background: #fff;
+  border: 1px solid #F0B9CE;
+  border-radius: 20px;
+  padding: 1px 8px;
+  vertical-align: 1px;
+}
+td.empty-row { text-align: center; color: var(--ink-sub); white-space: normal; }
+
+/* ===== 3. 출결 방식 선택 ===== */
 .mode-group {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -101,7 +190,7 @@ h2 { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
 .sub-options .btn { flex-direction: column; padding: 16px 8px; font-size: 15px; }
 .sub-options .icon { font-size: 26px; }
 
-/* ===== 2페이지: 카메라 촬영 ===== */
+/* ===== 4. 카메라 촬영 ===== */
 .room-select {
   border: 2px solid var(--line);
   border-radius: 14px;
@@ -191,15 +280,30 @@ select {
 @keyframes flash { 0% { opacity: .7; } 100% { opacity: 0; } }
 
 .room-panel .fields.single { grid-template-columns: 1fr; }
-.lecture-pick { margin-top: 14px; margin-bottom: 0; }
 .room-msg { font-size: 14px; color: var(--ink-sub); margin-top: 10px; }
 .room-msg:empty { display: none; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
+/* 지각 인정 시간 선택 */
+.late-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.late-select label { font-weight: 700; font-size: 15px; }
+.late-select .hint { display: block; font-weight: 400; font-size: 12px; color: var(--ink-sub); }
+.late-select select { width: auto; min-width: 96px; }
+.late-select select:disabled { opacity: .6; }
+
 .shoot-info { text-align: center; font-size: 14px; color: var(--ink-sub); margin: 12px 0 20px; }
 .btn.stop { background: var(--absent); color: #fff; }
 
-/* ===== 3페이지: 출결 현황 ===== */
+/* ===== 5. 출결 현황 ===== */
 .summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -223,30 +327,30 @@ tr:last-child td { border-bottom: none; }
 td.status, th.status { text-align: center; width: 110px; }
 
 .badge {
-  border: none;
-  font: inherit;
+  display: inline-block;
   font-size: 13px;
   font-weight: 700;
   padding: 6px 12px;
   border-radius: 20px;
-  cursor: pointer;
 }
-span.badge { display: inline-block; cursor: default; }
 .badge.present { background: var(--main); color: #0F3B42; }
 .badge.absent { background: #FBE3E3; color: #B54141; }
 
-.photo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
+/* ===== 모바일 ===== */
+@media (max-width: 560px) {
+  .page { padding: 24px 16px 40px; }
+  .course-card {
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    padding: 16px;
+  }
+  .course-title { grid-column: 1 / -1; font-size: 17px; }
+  .course-stat { text-align: left; display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .course-stat strong { display: inline; font-size: 18px; }
+  th, td { padding: 10px; }
+  .lecture-table th.week, .lecture-table td.week { width: 64px; }
+  .lecture-table th.action, .lecture-table td.action { width: auto; }
 }
-.photo-grid figure { border-radius: 12px; overflow: hidden; border: 2px solid var(--line); }
-.photo-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
-.photo-grid figcaption { font-size: 12px; color: var(--ink-sub); padding: 6px 8px; }
-.empty { color: var(--ink-sub); font-size: 14px; padding: 24px; text-align: center; border: 2px dashed var(--line); border-radius: 14px; }
-
-.section-head { display: flex; justify-content: space-between; align-items: baseline; }
-.section-head button { background: none; border: none; color: var(--ink-sub); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

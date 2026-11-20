@@ -102,13 +102,15 @@ class Data:
     l1: int  # 가반, 21303, D0
     l2: int  # 나반, 21303, D0   → 21303 @ D0 회차 2개
     l3: int  # 가반, 21303, D0+7
-    l4: int  # 나반, 11101, D0   → 11101 @ D0 회차 1개
+    l4: int  # 나반, 11101, D0
+    l5: int  # 가반, 21303, D0+2 (10주차 2차시, 마지막에 추가 → id 순서와 날짜 순서가 다름)
 
 
 @pytest.fixture
 def data(app, db) -> Data:
     """
     class C1(가반): S1, S2, S3, S6(임베딩 없음)    class C2(나반): S3, S4
+    class C0(자료구조): 수강생·회차 없음 (코드는 가장 앞, 과목명은 가장 뒤)
     S5 는 어떤 과목도 수강하지 않음
     """
     engine = app.state.face_engine
@@ -122,6 +124,7 @@ def data(app, db) -> Data:
         [
             Course(course_code="C1", course_name="알고리즘(가반)"),
             Course(course_code="C2", course_name="알고리즘(나반)"),
+            Course(course_code="C0", course_name="자료구조"),
         ]
     )
     db.add_all(
@@ -138,6 +141,7 @@ def data(app, db) -> Data:
         Lecture(course_code="C2", room_no="21303", week=10, session_no=1, date=D0),
         Lecture(course_code="C1", room_no="21303", week=11, session_no=1, date=D0 + dt.timedelta(days=7)),
         Lecture(course_code="C2", room_no="11101", week=10, session_no=2, date=D0),
+        Lecture(course_code="C1", room_no="21303", week=10, session_no=2, date=D0 + dt.timedelta(days=2)),
     ]
     db.add_all(lectures)
     db.commit()

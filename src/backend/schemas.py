@@ -11,6 +11,27 @@ class RoomOut(BaseModel):
     camera: str | None
 
 
+class CourseOut(BaseModel):
+    course_code: str
+    course_name: str
+    lecture_count: int  # 대면 수업 출결 수 (회차 수)
+
+
+class CourseDetailOut(BaseModel):
+    course_code: str
+    course_name: str
+
+
+class CourseLectureOut(BaseModel):
+    """과목 홈의 회차 목록 한 줄."""
+
+    lecture_id: int
+    week: int
+    session_no: int
+    date: dt.date
+    room_no: str
+
+
 class LectureOut(BaseModel):
     lecture_id: int
     course_code: str
