@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://127.0.0.1:5500,http://localhost:5500"
 
     # 얼굴 엔진 이름 (face_engine.py 의 레지스트리 키)
-    face_engine: str = "dummy"
+    face_engine: str = "retinaface"
 
     # 코사인 유사도가 이 값보다 "커야" 매칭
     threshold: float = 0.5

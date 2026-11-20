@@ -57,6 +57,7 @@ Python 3.10 이상이 필요합니다. Python 3.11(numpy 1.26.4)과 Python 3.14(
 | demo/ | 데모용 단체 사진 4장 (아래 참고) |
 
 **더미 엔진에서 출석이 잡히는 걸 보려면**
+예시 증명사진과 `demo/` 사진은 합성 패턴이라 기본 엔진(`retinaface`)은 얼굴을 찾지 못합니다(학생 임베딩도 만들어지지 않음). 예시 데이터로 확인할 때는 `.env`에 `FACE_ENGINE=dummy`를 지정한 뒤 seed와 서버를 실행하세요.
 더미 엔진은 실제 얼굴을 인식하지 못해서 웹캠으로 찍은 사진은 아무와도 매칭되지 않습니다. 대신 `/docs`의 `POST /lectures/{id}/photos`에 `demo/` 사진을 올리면 출석이 반영됩니다. 회차 번호(`lecture_id`)는 seed 실행 결과에 출력됩니다.
 
 | 파일 | 결과 |
@@ -150,7 +151,8 @@ src/backend/
 ├─ database.py               DB 엔진·세션, SQLite FK PRAGMA
 ├─ models.py                 usaint 6개 테이블
 ├─ schemas.py                응답 형식
-├─ face_engine.py            얼굴 엔진 인터페이스 + 더미 구현 (DB 접근 없음)
+├─ face_engine.py            얼굴 엔진 등록·선택, 검출 결과(fd_pipeline) → 인식 연결, 더미 구현 (DB 접근 없음)
+├─ engines/                  얼굴 검출·정렬: detector.py, align.py, fd_pipeline.py, retinaface/(모델 코드, weight/)
 ├─ routers/                  courses.py, lectures.py, rooms.py (요청 접수)
 ├─ services/
 │  ├─ usaint.py              ★ usaint DB 를 읽고 쓰는 SQL 은 모두 여기에 (실제 usaint 연동 시 이 파일만 교체)
@@ -176,7 +178,7 @@ src/frontend/
 | `DB_URL` (또는 `DATABASE_URL`) | 비움 → `DATA_DIR/usaint.db` | usaint DB 접속 주소 |
 | `DATA_DIR` | `src/backend/data` | usaint.db, 예시 증명사진, 데모 사진 (상대경로는 저장소 루트 기준) |
 | `CORS_ORIGINS` | `http://127.0.0.1:5500,http://localhost:5500` | 쉼표로 구분 |
-| `FACE_ENGINE` | `dummy` | 얼굴 엔진 ([가이드](../../docs/face_engine_guide.md)) |
+| `FACE_ENGINE` | `retinaface` | 얼굴 엔진 ([가이드](../../docs/face_engine_guide.md)). `retinaface`는 검출 가중치 필요, `dummy`는 가중치 없이 테스트·예시 데이터용 |
 | `THRESHOLD` | `0.5` | 코사인 유사도가 이 값보다 커야 매칭 |
 | `MAX_UPLOAD_MB` | `10` | 업로드 최대 크기 (카메라 원본 해상도 사진, 최대 4K JPEG) |
 
@@ -188,4 +190,4 @@ src/frontend/
 - **지각 구분 없음**: 지각 인정 시간이 지난 뒤 처음 인식된 학생도 `present=true`(출석)로 기록됩니다. DB에 지각 상태가 없습니다.
 - **수동 수정 없음**: 교수가 출석을 직접 고치는 API는 없습니다. 인식되지 않은 학생은 결석으로 남습니다.
 - **수강 명단 기준**: 수강생만 비교하므로, 등록되지 않은 사람이나 다른 분반 학생은 매칭되지 않습니다(의도한 동작).
-- 더미 엔진은 실제 얼굴을 인식하지 못합니다. 실제 모델(RetinaFace + FR 모델)을 연결해야 웹캠 사진으로 출석이 잡힙니다.
+- 기본 엔진 `retinaface`는 검출만 실제 모델(RetinaFace)이고, 인식은 AdaFace 연결 전까지 더미입니다. 그래서 출석 매칭 결과는 아직 의미가 없습니다.
