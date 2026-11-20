@@ -1,23 +1,11 @@
-"""얼굴 엔진(인터페이스·더미·랜드마크 정렬)과 1:1 매칭 로직 단위 테스트."""
+"""얼굴 엔진(연결부·더미)과 1:1 매칭 로직 단위 테스트.
+정렬·검출 출력 규격은 test_align.py, test_detector.py 가 맡는다."""
 from __future__ import annotations
 
 import numpy as np
 import pytest
-from PIL import Image
 
-from backend.face_engine import (
-    ALIGN_SIZE,
-    ARCFACE_TEMPLATE,
-    DummyDetector,
-    DummyEmbedder,
-    FaceDetection,
-    FaceDetector,
-    FaceEmbedder,
-    FaceEngine,
-    align_face,
-    create_face_engine,
-    similarity_transform,
-)
+from backend.face_engine import DummyDetector, FaceEmbedder, FaceEngine, available_engines, create_face_engine
 from backend.services.recognition import Gallery, build_gallery, match_one_to_one, to_blob
 
 from .conftest import face_array
@@ -27,9 +15,9 @@ from .conftest import face_array
 def test_dummy_embedding_is_deterministic_and_normalized():
     eng = create_face_engine("dummy")
     img = face_array(1)
-    (det, e1), = eng.detect_and_embed(img)
+    (box, e1), = eng.detect_and_embed(img)
     (_, e2), = eng.detect_and_embed(img.copy())
-    assert isinstance(det, FaceDetection) and det.landmarks is None
+    assert len(box) == 4 and all(type(v) is int for v in box)
     assert e1.dtype == np.float32 and e1.shape == (128,)
     assert abs(np.linalg.norm(e1) - 1) < 1e-5
     assert np.array_equal(e1, e2)
@@ -39,14 +27,27 @@ def test_dummy_embedding_is_deterministic_and_normalized():
 
 def test_dummy_detector_rules():
     det = DummyDetector()
-    assert det.detect(np.full((100, 100, 3), 7, np.uint8)) == []
-    assert len(det.detect(face_array(1, 100))) == 1
-    assert len(det.detect(np.hstack([face_array(1, 100)] * 3))) == 3
+    dets, landms = det.detect(np.full((100, 100, 3), 7, np.uint8))
+    assert dets.shape == (0, 5) and landms.shape == (0, 5, 2)
+    dets, landms = det.detect(face_array(1, 100))
+    assert dets.shape == (1, 5) and landms.shape == (1, 5, 2)
+    dets, landms = det.detect(np.hstack([face_array(1, 100)] * 3))
+    assert dets.shape == (3, 5) and landms.shape == (3, 5, 2)
+    # 반환 형식은 RetinaFaceDetector 와 같고, 5점은 박스 안에 있다
+    x1, y1, x2, y2 = (dets[:, i : i + 1] for i in range(4))
+    lx, ly = landms[..., 0], landms[..., 1]
+    assert np.all((lx >= x1) & (lx <= x2) & (ly >= y1) & (ly <= y2))
 
 
 def test_unknown_engine():
     with pytest.raises(ValueError, match="dummy"):
         create_face_engine("nope")
+
+
+def test_retinaface_engine_registered_without_loading_model():
+    assert "retinaface" in available_engines()
+    eng = create_face_engine("retinaface")
+    assert eng.detector is None  # 실제 검출기는 fd_pipeline.get_detector() 가 처음 쓸 때 불러온다
 
 
 def test_engine_rejects_bad_embedder_output():
@@ -60,93 +61,23 @@ def test_engine_rejects_bad_embedder_output():
         FaceEngine("bad", DummyDetector(), BadEmbedder()).detect_and_embed(face_array(1))
 
 
-def test_engine_accepts_tuples_clips_bbox_and_normalizes():
-    class TupleDetector(FaceDetector):
-        def detect(self, image):
-            return [(-10, -10, 50.4, 50.6), (500, 500, 10, 10)]  # 하나는 일부 밖, 하나는 완전히 밖
-
+def test_engine_normalizes_embedding_of_aligned_square_face():
     class Unnormalized(FaceEmbedder):
         dim = 4
 
+        def __init__(self):
+            self.shapes = []
+
         def embed(self, face_image):
+            self.shapes.append(face_image.shape)
             return np.array([3, 4, 0, 0], np.float64)
 
-    out = FaceEngine("t", TupleDetector(), Unnormalized()).detect_and_embed(face_array(1))
-    assert [d.bbox for d, _ in out] == [(0, 0, 40, 41)]
+    emb = Unnormalized()
+    out = FaceEngine("t", DummyDetector(), emb).detect_and_embed(face_array(1))
+    assert len(out) == 1
     assert out[0][1].dtype == np.float32 and np.allclose(out[0][1], [0.6, 0.8, 0, 0])
-
-
-# ---------- 랜드마크 정렬 ----------
-class _RecordingEmbedder(FaceEmbedder):
-    dim = 4
-
-    def __init__(self):
-        self.shapes = []
-
-    def embed(self, face_image):
-        self.shapes.append(face_image.shape)
-        return np.ones(4, np.float32)
-
-
-class _FixedDetector(FaceDetector):
-    def __init__(self, dets):
-        self.dets = dets
-
-    def detect(self, image):
-        return self.dets
-
-
-def test_landmarks_use_alignment_otherwise_bbox_crop():
-    lm = tuple(map(tuple, ARCFACE_TEMPLATE * 2 + [40, 30]))
-    emb = _RecordingEmbedder()
-    eng = FaceEngine(
-        "t",
-        _FixedDetector([FaceDetection(bbox=(40, 30, 224, 224), landmarks=lm), FaceDetection(bbox=(0, 0, 50, 60))]),
-        emb,
-    )
-    eng.detect_and_embed(face_array(1, 300))
-    assert emb.shapes == [(ALIGN_SIZE, ALIGN_SIZE, 3), (60, 50, 3)]
-
-
-def test_invalid_landmarks_rejected():
-    eng = FaceEngine("t", _FixedDetector([FaceDetection(bbox=(0, 0, 50, 50), landmarks=((1, 2),) * 4)]), _RecordingEmbedder())
-    with pytest.raises(ValueError, match="5점"):
-        eng.detect(face_array(1))
-
-
-def test_similarity_transform_recovers_known_transform():
-    theta, scale, t = np.deg2rad(20), 1.7, np.array([12.0, -5.0])
-    rot = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-    src = ARCFACE_TEMPLATE
-    dst = (scale * (rot @ src.T)).T + t
-    m = similarity_transform(src, dst)
-    assert np.allclose(m[:, :2], scale * rot, atol=1e-9)
-    assert np.allclose(m[:, 2], t, atol=1e-9)
-
-
-def test_align_face_matches_crop_and_resize():
-    # 랜드마크가 표준 위치를 2배 확대 + (40, 30) 이동한 곳에 있으면,
-    # 정렬 결과는 (40, 30)에서 224x224 를 잘라 112 로 줄인 것과 같아야 한다.
-    img = face_array(7, 300)
-    lm = ARCFACE_TEMPLATE * 2 + [40, 30]
-    aligned = align_face(img, lm)
-    expected = np.asarray(Image.fromarray(img).crop((40, 30, 264, 254)).resize((112, 112), Image.BILINEAR))
-    assert aligned.shape == (112, 112, 3) and aligned.dtype == np.uint8
-    assert np.abs(aligned.astype(int) - expected.astype(int)).mean() < 6
-
-
-def test_alignment_undoes_rotation():
-    # 이미지를 돌려도 랜드마크로 정렬하면 비슷한 얼굴 이미지가 나온다
-    img = face_array(3, 300)
-    lm = ARCFACE_TEMPLATE * 2 + [40, 30]
-    base = align_face(img, lm).astype(int)
-    rotated = np.asarray(Image.fromarray(img).rotate(15, resample=Image.BILINEAR, center=(150, 150)))
-    theta = np.deg2rad(-15)  # PIL 은 반시계(+)로 돌림 → 이미지 좌표(y 아래)에서는 -15도
-    rot = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-    lm_rot = ((rot @ (lm - 150).T).T) + 150
-    again = align_face(rotated, lm_rot).astype(int)
-    inner = (slice(20, 92), slice(20, 92))  # 회전으로 생긴 가장자리 빈 영역 제외
-    assert np.abs(base[inner] - again[inner]).mean() < 12
+    h, w, c = emb.shapes[0]
+    assert h == w and c == 3  # 임베더는 fd_pipeline 이 정렬한 정사각형 얼굴을 받는다
 
 
 # ---------- 1:1 매칭 ----------
