@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 from backend.services.storage import decode_image
-from backend.engines.pipeline import detect_and_align, get_detector
+from backend.engines.fd_pipeline import detect_and_align, get_detector
 
 TEST_DIR = Path(__file__).resolve().parent
 IN_DIR = TEST_DIR / "input-img"

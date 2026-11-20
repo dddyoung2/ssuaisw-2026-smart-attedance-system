@@ -6,10 +6,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from backend.engines import pipeline
+from backend.engines import fd_pipeline
 from backend.engines.detector import WEIGHT_PATH
 
-IMG_DIR = Path(pipeline.__file__).resolve().parent / "retinaface" / "test" / "input-img"
+IMG_DIR = Path(fd_pipeline.__file__).resolve().parent / "retinaface" / "test" / "input-img"
 PHOTOS = sorted(p for p in IMG_DIR.glob("*") if p.suffix.lower() in {".jpg", ".jpeg", ".png"}) if IMG_DIR.exists() else []
 
 
@@ -35,7 +35,7 @@ def test_output_contract():
     photo = np.full((300, 400, 3), 100, np.uint8)
     dets = np.array([[10.4, 20.6, 110.2, 140.9, 0.99], [-5.0, 250.0, 60.0, 320.0, 0.95]], np.float32)
     landms = np.stack([face_landmarks(*d[:4]) for d in dets]).astype(np.float32)
-    boxes, images = pipeline.detect_and_align(photo, detector=FakeDetector(dets, landms))
+    boxes, images = fd_pipeline.detect_and_align(photo, detector=FakeDetector(dets, landms))
 
     assert len(boxes) == len(images) == 2
     assert boxes[0] == (10, 21, 100, 120)
@@ -48,7 +48,7 @@ def test_output_contract():
 
 def test_no_face_returns_empty_lists():
     empty = FakeDetector(np.zeros((0, 5), np.float32), np.zeros((0, 5, 2), np.float32))
-    assert pipeline.detect_and_align(np.zeros((300, 400, 3), np.uint8), detector=empty) == ([], [])
+    assert fd_pipeline.detect_and_align(np.zeros((300, 400, 3), np.uint8), detector=empty) == ([], [])
 
 
 # ---------- 실제 모델 (로컬 전용) ----------
@@ -60,9 +60,9 @@ needs_real = pytest.mark.skipif(not WEIGHT_PATH.exists() or not PHOTOS,
 def real_result():
     from backend.services.storage import decode_image
     photo = decode_image(PHOTOS[0].read_bytes())
-    det = pipeline.get_detector()
+    det = fd_pipeline.get_detector()
     dets, landms = det.detect(photo)
-    boxes, images = pipeline.detect_and_align(photo, detector=det)
+    boxes, images = fd_pipeline.detect_and_align(photo, detector=det)
     return photo, dets, landms, boxes, images
 
 
@@ -85,7 +85,7 @@ def test_real_landmarks_inside_boxes(real_result):
 
 
 @needs_real
-def test_real_pipeline_output(real_result):
+def test_real_fd_pipeline_output(real_result):
     photo, dets, _, boxes, images = real_result
     h, w = photo.shape[:2]
     assert len(boxes) == len(images) == len(dets)
