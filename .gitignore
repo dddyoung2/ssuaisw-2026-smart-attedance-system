@@ -21,10 +21,6 @@ dataset/*
 !dataset/README.md
 
 # 실험 로컬 전용
-src/exp/**/weights/
-src/exp/**/third_party/
-src/exp/**/results/predictions/
-src/exp/**/results/logs/
 .cache/
 
 # 모델·특징 벡터 파일
@@ -43,8 +39,13 @@ src/backend/data/
 *.db
 *.sqlite3
 
+src/backend/engines/retinaface/test/input-img/*
+src/backend/engines/retinaface/test/output-img/*
+!src/backend/engines/retinaface/test/**/.gitkeep
+
 # 가상환경 (venv 이름도 제외)
 venv/
 
 # 테스트 캐시
 .pytest_cache/
+/src/backend/engines/retinaface/test/imigration_test.py
