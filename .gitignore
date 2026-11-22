@@ -29,6 +29,7 @@ dataset/*
 *.onnx
 *.npy
 *.npz
+*.safetensors
 
 # 기타
 .DS_Store
