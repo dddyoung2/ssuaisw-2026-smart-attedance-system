@@ -82,11 +82,13 @@ ssuaisw-2026-smart-attedance-system/
 │  ├─frontend                         # 출결 화면: 과목 목록 → 과목 홈 → 출결 방식 → 카메라 → 출결 현황
 │  │  └─js                            # 화면별 스크립트, API 호출
 │  ├─backend                          # 서버, DB (FastAPI, SQLite)
-│  │  ├─engines                       # 얼굴 탐지 엔진
+│  │  ├─engines                       # 얼굴 탐지·인식 엔진
 │  │  │  ├─retinaface                 # RetinaFace 모델 코드(MIT), weight/ 가중치 위치
+│  │  │  ├─adaface                    # AdaFace 모델 코드(MIT)·가중치 로더, weight/ 가중치 위치
 │  │  │  ├─detector.py                # 검출: 박스·5점 랜드마크
 │  │  │  ├─align.py                   # 정렬·크롭 (CelebA-HQ 방식, 리사이즈 없음)
-│  │  │  └─fd_pipeline.py             # 검출 → 정렬, 인식 인계 출력 (박스 좌표·정렬 이미지 리스트)
+│  │  │  ├─fd_pipeline.py             # 검출 → 정렬, 인식 인계 출력 (박스 좌표·정렬 이미지 리스트)
+│  │  │  └─embedder.py                # 인식: 정렬 얼굴 → 112 축소 → AdaFace 512차원 임베딩
 │  │  ├─routers                       # API: 과목·회차 목록(courses), 회차 시작·사진·출결(lectures), 강의실(rooms)
 │  │  ├─services                      # 출석 처리, 1:1 매칭, usaint DB 조회, 업로드 검증
 │  │  └─scripts                       # 학생 임베딩 계산(compute_embeddings), 예시 DB 생성(seed_usaint)
@@ -119,11 +121,23 @@ pip install -r requirements.txt
 
 ---
 
-### 얼굴 탐지 가중치 다운로드
+### 가중치 다운로드
 
-[Releases](https://github.com/dddyoung2/ssuaisw-2026-smart-attedance-system/releases/tag/det-v1.0.0)에서 `Resnet50_Final.pth`를 받아 아래 경로에 둡니다. (git에는 포함되지 않습니다)
+Releases에서 가중치 2개를 받아 아래 경로에 둡니다. (git에는 포함되지 않습니다)
 
-src/backend/engines/retinaface/weight/Resnet50_Final.pth
+| 모델 | Release | 파일 → 둘 경로 |
+|---|---|---|
+| 얼굴 탐지 (RetinaFace) | [det-v1.0.0](https://github.com/dddyoung2/ssuaisw-2026-smart-attedance-system/releases/tag/det-v1.0.0) | `Resnet50_Final.pth` → `src/backend/engines/retinaface/weight/` |
+| 얼굴 인식 (AdaFace) | [AdaFace_weights_v1.0.0](https://github.com/dddyoung2/ssuaisw-2026-smart-attedance-system/releases/tag/AdaFace_weights_v1.0.0) | `adaface_ir101_webface12m_original.safetensors` → `src/backend/engines/adaface/weight/` |
+
+GitHub CLI로 받을 때 (저장소 루트에서):
+
+```bash
+gh release download det-v1.0.0 -p Resnet50_Final.pth -D src/backend/engines/retinaface/weight
+gh release download AdaFace_weights_v1.0.0 -p adaface_ir101_webface12m_original.safetensors -D src/backend/engines/adaface/weight
+```
+
+AdaFace 가중치는 불러올 때 SHA-256을 확인합니다. 다른 파일이면 오류가 납니다.
 
 ---
 
@@ -144,7 +158,7 @@ python main.py
 | http://127.0.0.1:8000/app/ | 출결 화면 (첫 화면: 과목 목록) |
 | http://127.0.0.1:8000/docs | API 문서 (Swagger UI) |
 
-기본 얼굴 엔진(`FACE_ENGINE=retinaface`)은 검출 가중치가 있어야 동작합니다. 가중치 없이, 또는 예시 데이터(합성 사진)로 확인할 때는 `.env`에 `FACE_ENGINE=dummy`를 지정하세요.
+기본 얼굴 엔진(`FACE_ENGINE=retinaface`, 검출 RetinaFace + 인식 AdaFace)은 가중치 2개가 있어야 동작합니다. 가중치 없이, 또는 예시 데이터(합성 사진)로 확인할 때는 `.env`에 `FACE_ENGINE=dummy`를 지정하세요.
 
 자세한 실행 순서와 예시 데이터는 [src/backend/README.md](src/backend/README.md)를 참고하세요.
 
@@ -198,4 +212,6 @@ LOG_LEVEL=INFO
 ## 출처
 
 - RetinaFace 모델 코드·가중치: [biubug6/Pytorch_Retinaface](https://github.com/biubug6/Pytorch_Retinaface) (MIT), WIDER FACE로 학습
+- AdaFace 모델 코드: [mk-minchul/AdaFace](https://github.com/mk-minchul/AdaFace) (MIT, commit `c60eaa7`의 `net.py` 그대로)
+- AdaFace 가중치: [minchul/cvlface_adaface_ir101_webface12m](https://huggingface.co/minchul/cvlface_adaface_ir101_webface12m) (revision `54f602a`, 파일명만 바꾼 원본), WebFace12M으로 학습. 사용 시 AdaFace 논문(Kim et al., CVPR 2022) 인용과 학습 데이터 라이선스를 따라야 함
 - 얼굴 정렬 규칙: CelebA-HQ 생성 방식 (Karras et al., Progressive Growing of GANs, 2018)
