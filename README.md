@@ -98,6 +98,10 @@ ssuaisw-2026-smart-attedance-system/
 
 ## 설치 방법 (Installation)
 
+### 구글 드라이브 (가중치, 데이터셋)
+
+URL : https://drive.google.com/drive/folders/1Zst0m2AAeyxXrnbKORR69ixqgJrnic38
+
 ### 저장소 클론
 
 ``` bash
