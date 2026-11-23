@@ -44,10 +44,15 @@ def test_unknown_engine():
         create_face_engine("nope")
 
 
-def test_retinaface_engine_registered_without_loading_model():
+def test_retinaface_engine_registered_without_loading_model(monkeypatch):
+    from backend.engines import embedder
+
+    monkeypatch.setattr(embedder, "_recognizer", None)
     assert "retinaface" in available_engines()
     eng = create_face_engine("retinaface")
     assert eng.detector is None  # 실제 검출기는 fd_pipeline.get_detector() 가 처음 쓸 때 불러온다
+    assert isinstance(eng.embedder, embedder.AdaFaceEmbedder) and eng.dim == 512
+    assert embedder._recognizer is None  # AdaFace 도 처음 임베딩할 때 불러온다(가중치 없어도 서버는 켜짐)
 
 
 def test_engine_rejects_bad_embedder_output():

@@ -1,6 +1,7 @@
 """얼굴 엔진: 백엔드가 얼굴 모델을 부르는 입구.
 
 검출과 정렬은 engines/ 가 맡는다(engines/fd_pipeline.py 의 detect_and_align).
+실제 인식 모델(AdaFace)은 engines/embedder.py 에 있다.
 이 파일은 그 결과를 받아
   - FACE_ENGINE 값으로 엔진 고르기 (레지스트리)
   - 정렬된 얼굴 → 임베더(인식 모델) → 임베딩 형식 검사
@@ -165,6 +166,13 @@ def create_face_engine(name: str) -> FaceEngine:
 
 register_engine("dummy", lambda: FaceEngine("dummy", DummyDetector(), DummyEmbedder()))
 
-# 검출: RetinaFace (engines/, 가중치는 README 참고). detector=None 이라 fd_pipeline.get_detector() 로 한 번만 로드.
-# 인식: AdaFace 연결 전이라 임시로 DummyEmbedder. AdaFace 임베더가 준비되면 여기서 교체한다.
-register_engine("retinaface", lambda: FaceEngine("retinaface", None, DummyEmbedder()))
+# 검출: RetinaFace (engines/detector.py). detector=None 이라 fd_pipeline.get_detector() 로 한 번만 로드.
+# 인식: AdaFace (engines/embedder.py). 가중치는 처음 임베딩할 때 embedder.get_recognizer() 로 한 번만 로드.
+# 두 가중치 모두 README "가중치 다운로드" 참고. 서버 시작 시에는 모델을 불러오지 않는다.
+def _make_retinaface() -> FaceEngine:
+    from .engines.embedder import AdaFaceEmbedder
+
+    return FaceEngine("retinaface", None, AdaFaceEmbedder())
+
+
+register_engine("retinaface", _make_retinaface)

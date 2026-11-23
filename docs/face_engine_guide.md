@@ -1,9 +1,9 @@
 # 얼굴 엔진 연결 가이드
 
 얼굴 검출·인식 모델이 백엔드에 연결되는 구조와 규칙입니다.
-**검출은 RetinaFace(ResNet-50)로 연결 완료**(`src/backend/engines/`), **인식(FR)은 AdaFace 연결 예정**입니다. 인식이 연결되기 전까지 `retinaface` 엔진은 임시로 더미 임베더를 씁니다.
+**검출은 RetinaFace(ResNet-50), 인식(FR)은 AdaFace(IR101, WebFace12M)로 연결되어 있습니다**(`src/backend/engines/`). 기본 엔진 `retinaface`가 두 모델을 함께 씁니다.
 
-백엔드의 다른 부분(DB, API, 매칭, 출석 저장)은 수정할 필요가 없습니다. 인식 모델은 `FaceEmbedder` 하나만 구현해 `face_engine.py`에 등록하면 됩니다.
+백엔드의 다른 부분(DB, API, 매칭, 출석 저장)은 수정할 필요가 없습니다. 인식 모델을 바꿀 때는 `FaceEmbedder` 하나만 구현해 `face_engine.py`에 등록하면 됩니다.
 
 ---
 
@@ -16,7 +16,7 @@
                                       │     ① engines/detector.py  검출 (박스 + 5점)
                                       │     ② engines/align.py     정렬·크롭 (CelebA-HQ 방식, 리사이즈 없음)
                                       │
-                                      └─ ③ FaceEmbedder          임베딩 (인식 모델, 리사이즈는 여기서)
+                                      └─ ③ engines/embedder.py   임베딩 (AdaFace, 112로 리사이즈는 여기서)
 ```
 
 | 파일 | 역할 |
@@ -24,6 +24,8 @@
 | `engines/detector.py` | `RetinaFaceDetector`: 사진 → 박스, 5점 |
 | `engines/align.py` | `align_face`: 5점 → 정사각형 얼굴 / `to_xywh`: 박스 → `(x, y, w, h)` |
 | `engines/fd_pipeline.py` | `detect_and_align`: 검출 → 정렬을 이어 인식에 넘길 `(boxes, images)` 생성 / `get_detector`: 검출기를 한 번만 로드 |
+| `engines/embedder.py` | `AdaFaceEmbedder`: 정렬 얼굴 → 512차원 임베딩 / `get_recognizer`: 인식 모델을 한 번만 로드 |
+| `engines/adaface/` | AdaFace 백본(`net.py`, 공식 코드 그대로)과 가중치 로더(`model.py`, SHA-256 검사), `weight/` 가중치 위치 |
 | `face_engine.py` | `FaceEngine`: fd_pipeline 결과를 임베더에 넘기고 임베딩 형식 검사 / 엔진 등록·선택(`FACE_ENGINE`) |
 
 - 얼굴 엔진은 **DB를 읽지 않습니다.** 사진을 받아 얼굴 임베딩 목록을 돌려주는 일만 합니다.
@@ -77,59 +79,43 @@ class FaceEmbedder(ABC):
 
 | 이름 | 검출 | 인식 | 용도 |
 |---|---|---|---|
-| `retinaface` (기본값) | RetinaFace | 더미 (AdaFace 연결 전 임시) | 실제 서버 |
-| `dummy` | 더미 | 더미 | 가중치 없이 테스트·CI |
+| `retinaface` (기본값) | RetinaFace | AdaFace (512차원) | 실제 서버 |
+| `dummy` | 더미 | 더미 (128차원) | 가중치 없이 테스트·CI |
 
 ```python
-register_engine("retinaface", lambda: FaceEngine("retinaface", None, DummyEmbedder()))
+def _make_retinaface() -> FaceEngine:
+    from .engines.embedder import AdaFaceEmbedder
+    return FaceEngine("retinaface", None, AdaFaceEmbedder())
+
+register_engine("retinaface", _make_retinaface)
 ```
 
 - 검출기 자리에 `None`을 넘기면 `fd_pipeline.get_detector()`의 RetinaFace를 씁니다. 처음 사진을 처리할 때 **한 번만** 불러옵니다. 등록 코드에서 `RetinaFaceDetector()`를 따로 만들지 마세요(모델이 두 번 올라갑니다).
-- `retinaface` 엔진은 가중치 파일이 있어야 동작합니다. 받는 방법은 루트 README의 "얼굴 탐지 가중치 다운로드"를 따릅니다(`src/backend/engines/retinaface/weight/Resnet50_Final.pth`).
+- AdaFace도 같은 방식으로, 처음 임베딩할 때 `embedder.get_recognizer()`가 **한 번만** 불러옵니다. 그래서 가중치가 없어도 서버는 켜지고, 사진을 처리할 때 오류가 납니다.
+- `retinaface` 엔진은 가중치 파일 2개가 있어야 동작합니다. 받는 방법은 루트 README의 "가중치 다운로드"를 따릅니다.
+  - `src/backend/engines/retinaface/weight/Resnet50_Final.pth`
+  - `src/backend/engines/adaface/weight/adaface_ir101_webface12m_original.safetensors`
 
-## 6. AdaFace 연결 방법 (추후 작업)
+## 6. AdaFace 인식 (engines/embedder.py)
 
-1. `src/backend/engines/`에 임베더 파일을 추가합니다.
+| 항목 | 값 |
+|---|---|
+| 모델 | AdaFace IR101, WebFace12M 사전학습 (CVLFace 원본 가중치, 미세조정 없음) |
+| 입력 | 정렬 얼굴 `(S, S, 3)` RGB 크롭 **전체를 112×112로 축소** (S > 112면 `INTER_AREA`, 아니면 `INTER_LINEAR`) |
+| 색 순서 | **RGB 그대로** (BGR 변환 없음) |
+| 정규화 | `pixel / 127.5 - 1` (로더 `encode_rgb` 안에서 함) |
+| 출력 | 512차원, L2 정규화 |
+| 가중치 검사 | 불러올 때 SHA-256을 확인하고, 다른 파일이면 오류 |
 
-```python
-# src/backend/engines/adaface_embedder.py (예시)
-import numpy as np
-from backend.face_engine import FaceEmbedder
+- 크롭은 ArcFace 5점 정렬이 아니라 CelebA-HQ 방식(얼굴 주변이 더 넓음)을 그대로 축소합니다. LFW 50쌍 확인에서 원본 5점 정렬보다 같은 사람 유사도가 약 0.035 낮았고, 같은 사람/다른 사람 구분(AUC)은 같았습니다. 실제 강의실 사진에서 성능이 낮으면 이 축소 방식을 바꿉니다.
+- CPU에서 얼굴 1개당 약 0.1초, 가중치 첫 로드는 수 초 걸립니다. 로더가 PyTorch CPU 스레드를 4개로 정합니다.
 
-class AdaFaceEmbedder(FaceEmbedder):
-    dim = 512
+### 다른 인식 모델로 바꿀 때
 
-    def __init__(self, weight_path: str):
-        import torch                               # 무거운 import 는 여기서
-        self.model = ...                           # 가중치 로드, eval()
-
-    def embed(self, face_image):                   # (S, S, 3) RGB, 리사이즈 전
-        face = ...                                 # 112x112 로 리사이즈
-        bgr = face[:, :, ::-1].astype(np.float32)  # AdaFace 공식 모델은 BGR 입력
-        x = (bgr / 255.0 - 0.5) / 0.5              # 입력 정규화 (공식 코드 확인)
-        vec = ...                                  # 모델 추론 → (512,)
-        vec = np.asarray(vec, dtype=np.float32).reshape(-1)
-        return vec / np.linalg.norm(vec)
-```
-
-2. `face_engine.py`의 `retinaface` 등록에서 더미 임베더를 바꿉니다. 검출기 자리는 `None` 그대로 둡니다.
-
-```python
-def _make_retinaface_adaface() -> FaceEngine:
-    from .engines.adaface_embedder import AdaFaceEmbedder
-    return FaceEngine("retinaface_adaface", None, AdaFaceEmbedder("<가중치 경로>"))
-
-register_engine("retinaface_adaface", _make_retinaface_adaface)
-```
-
-3. 필요한 패키지를 `requirements.txt`에 추가합니다. 검출 쪽이 `torch==2.12.0`, `torchvision==0.27.0`, `opencv-python==4.11.0.86`, `numpy==1.26.4`로 고정되어 있으니 이 버전과 맞춰 주세요. 가중치 파일(`*.pt`, `*.pth`, `*.onnx`)은 `.gitignore`로 제외되어 있으니 git에 올리지 말고, 받는 방법을 README에 적어 주세요.
-4. `.env`를 수정합니다.
-
-```
-FACE_ENGINE=retinaface_adaface
-THRESHOLD=0.3        # 모델마다 적정값이 다름. 실제 사진으로 조정
-```
-
+1. `engines/`에 `FaceEmbedder`를 구현한 클래스를 추가합니다. 리사이즈, 색 순서, 정규화는 그 모델의 공식 코드를 따라 임베더 안에서 합니다.
+2. `face_engine.py`의 `_make_retinaface`에서 임베더를 바꾸거나, 새 이름으로 등록합니다. 검출기 자리는 `None` 그대로 둡니다.
+3. 패키지는 기존 고정 버전(`torch==2.12.0`, `torchvision==0.27.0`, `opencv-python==4.11.0.86`, `numpy==1.26.4`)과 맞춥니다. 가중치 파일(`*.pt`, `*.pth`, `*.onnx`, `*.safetensors`)은 `.gitignore`로 제외되어 있으니 git에 올리지 말고, 받는 방법을 README에 적습니다.
+4. `.env`의 `FACE_ENGINE`과 `THRESHOLD`를 바꿉니다. 임계값은 모델마다 적정값이 다르니 실제 사진으로 정합니다(8번).
 5. 서버를 재시작하고 `GET /health`에서 `face_engine`과 `embedding_dim`이 바뀌었는지 확인합니다.
 6. **학생 임베딩을 다시 계산합니다** (7번).
 
@@ -153,7 +139,7 @@ python -m backend.scripts.compute_embeddings             # 실제 저장
 
 - 매칭 조건은 `코사인 유사도 > THRESHOLD`입니다.
 - 한 사진 안에서 얼굴 하나는 수강생 한 명에게만, 수강생 한 명은 얼굴 하나에만 배정됩니다. 유사도가 높은 쌍부터 배정합니다.
-- 실제 모델이 정해지면 같은 사람/다른 사람 쌍으로 유사도 분포를 확인해 값을 정하세요.
+- 지금 기본값 `0.5`는 **임시값**입니다. AdaFace 원배포의 참고값은 `0.109`(VGGFace2 기준)입니다. 실제 강의실 사진과 증명사진으로 같은 사람/다른 사람 유사도 분포를 확인해 정해야 합니다.
 
 ## 9. 더미 엔진 (테스트·CI용, 유지)
 
@@ -169,15 +155,14 @@ DummyEmbedder는 흑백 변환 → 16×8 축소 → 평균 제거 → L2 정규�
 ## 10. 확인 방법
 
 ```powershell
-python -m pytest tests/test_face_engine.py tests/test_align.py tests/test_detector.py    # 저장소 루트에서
+python -m pytest tests/test_face_engine.py tests/test_align.py tests/test_detector.py tests/test_embedder.py    # 저장소 루트에서
 ```
 
 | 테스트 | 확인하는 것 |
 |---|---|
-| `test_face_engine.py` | 엔진 등록·선택, 임베딩 검사, 더미 엔진, 1:1 매칭 |
+| `test_face_engine.py` | 엔진 등록·선택(서버 시작 때 모델을 불러오지 않는지), 임베딩 검사, 더미 엔진, 1:1 매칭 |
 | `test_align.py` | 정렬 결과의 크기·방향·배율 |
 | `test_detector.py` | 검출·인계 출력 규격. 실제 RetinaFace 테스트는 가중치와 `engines/retinaface/test/input-img/` 사진이 있을 때만 실행 |
+| `test_embedder.py` | 112 축소 방식, 임베더 연결 규격. 실제 AdaFace 테스트는 가중치가 있을 때만 실행 |
 
-새 임베더용 테스트도 `tests/`에 추가하는 것을 권장합니다. 확인할 것은 두 가지입니다.
-- 같은 사람 사진 두 장의 유사도가 THRESHOLD보다 큰지
-- 다른 사람 사진의 유사도가 THRESHOLD보다 작은지
+같은 사람/다른 사람 사진으로 THRESHOLD를 확인하는 테스트는 얼굴 사진이 필요해 저장소에 넣지 않습니다(개인정보). 로컬에서 따로 확인합니다.

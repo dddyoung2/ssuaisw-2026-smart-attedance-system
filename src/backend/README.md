@@ -152,7 +152,7 @@ src/backend/
 ├─ models.py                 usaint 6개 테이블
 ├─ schemas.py                응답 형식
 ├─ face_engine.py            얼굴 엔진 등록·선택, 검출 결과(fd_pipeline) → 인식 연결, 더미 구현 (DB 접근 없음)
-├─ engines/                  얼굴 검출·정렬: detector.py, align.py, fd_pipeline.py, retinaface/(모델 코드, weight/)
+├─ engines/                  얼굴 검출·정렬·인식: detector.py, align.py, fd_pipeline.py, embedder.py, retinaface/·adaface/(모델 코드, weight/)
 ├─ routers/                  courses.py, lectures.py, rooms.py (요청 접수)
 ├─ services/
 │  ├─ usaint.py              ★ usaint DB 를 읽고 쓰는 SQL 은 모두 여기에 (실제 usaint 연동 시 이 파일만 교체)
@@ -178,7 +178,7 @@ src/frontend/
 | `DB_URL` (또는 `DATABASE_URL`) | 비움 → `DATA_DIR/usaint.db` | usaint DB 접속 주소 |
 | `DATA_DIR` | `src/backend/data` | usaint.db, 예시 증명사진, 데모 사진 (상대경로는 저장소 루트 기준) |
 | `CORS_ORIGINS` | `http://127.0.0.1:5500,http://localhost:5500` | 쉼표로 구분 |
-| `FACE_ENGINE` | `retinaface` | 얼굴 엔진 ([가이드](../../docs/face_engine_guide.md)). `retinaface`는 검출 가중치 필요, `dummy`는 가중치 없이 테스트·예시 데이터용 |
+| `FACE_ENGINE` | `retinaface` | 얼굴 엔진 ([가이드](../../docs/face_engine_guide.md)). `retinaface`는 검출(RetinaFace)·인식(AdaFace) 가중치 2개 필요, `dummy`는 가중치 없이 테스트·예시 데이터용 |
 | `THRESHOLD` | `0.5` | 코사인 유사도가 이 값보다 커야 매칭 |
 | `MAX_UPLOAD_MB` | `10` | 업로드 최대 크기 (카메라 원본 해상도 사진, 최대 4K JPEG) |
 
@@ -190,4 +190,4 @@ src/frontend/
 - **지각 구분 없음**: 지각 인정 시간이 지난 뒤 처음 인식된 학생도 `present=true`(출석)로 기록됩니다. DB에 지각 상태가 없습니다.
 - **수동 수정 없음**: 교수가 출석을 직접 고치는 API는 없습니다. 인식되지 않은 학생은 결석으로 남습니다.
 - **수강 명단 기준**: 수강생만 비교하므로, 등록되지 않은 사람이나 다른 분반 학생은 매칭되지 않습니다(의도한 동작).
-- 기본 엔진 `retinaface`는 검출만 실제 모델(RetinaFace)이고, 인식은 AdaFace 연결 전까지 더미입니다. 그래서 출석 매칭 결과는 아직 의미가 없습니다.
+- 기본 엔진 `retinaface`(RetinaFace + AdaFace)의 `THRESHOLD=0.5`는 임시값입니다. 실제 강의실 사진으로 다시 정해야 합니다.
