@@ -287,7 +287,6 @@ select {
   border-radius: 20px;
 }
 .face-badge:empty { display: none; }
-.preview-hint { font-size: 13px; color: var(--ink-sub); margin: -8px 0 16px; }
 
 .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 .flash.go { animation: flash .35s; }
