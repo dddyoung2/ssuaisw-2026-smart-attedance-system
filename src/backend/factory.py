@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import FRONTEND_DIR, Settings, get_settings
 from .database import Base, make_engine, make_session_factory
 from .face_engine import create_face_engine
-from .routers import courses, lectures, rooms
+from .routers import courses, lectures, preview, rooms
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    for r in (courses.router, lectures.router, rooms.router):
+    for r in (courses.router, lectures.router, rooms.router, preview.router):
         app.include_router(r)
 
     @app.get("/health", tags=["system"], summary="서버 상태")
