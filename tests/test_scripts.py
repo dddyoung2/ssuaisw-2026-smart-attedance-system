@@ -117,6 +117,31 @@ def test_seed_is_repeatable(tmp_path):
     assert not stale.exists()  # 이전 seed 의 사진도 정리
 
 
+def test_seed_keeps_existing_student_photos(tmp_path):
+    from PIL import Image
+
+    settings = make_settings(tmp_path)
+    seed(settings, today=TODAY, with_embeddings=False)
+    mine = settings.student_photo_dir / "20231001.png"
+    Image.fromarray(np.tile(np.arange(64, dtype=np.uint8)[:, None, None], (1, 64, 3))).save(mine)  # 바꿔 넣은 사진
+    mine_bytes = mine.read_bytes()
+    (settings.student_photo_dir / "20231002.png").unlink()  # 지운 사진
+
+    result = seed(settings, today=TODAY)
+    assert mine.read_bytes() == mine_bytes  # 덮어쓰지 않음
+    assert "20231001" in result["kept_photos"] and "20231002" not in result["kept_photos"]
+    assert (settings.student_photo_dir / "20231002.png").exists()  # 없던 학생만 패턴으로 다시 만듦
+    assert len(list(settings.student_photo_dir.glob("*.png"))) == 8
+
+    # 임베딩은 유지한 사진으로 계산된다
+    eng = make_engine(settings.db_url)
+    with make_session_factory(eng)() as db:
+        expected = create_face_engine("dummy").detect_and_embed(np.asarray(Image.open(mine).convert("RGB")))[0][1]
+        got = np.frombuffer(db.get(Student, "20231001").embedding, np.float32)
+        assert np.allclose(got, expected)
+    eng.dispose()
+
+
 def test_seed_demo_photos_mark_attendance(tmp_path):
     settings = make_settings(tmp_path, max_upload_mb=5)
     lid = _today_lecture(seed(settings, today=TODAY), ALGO)
