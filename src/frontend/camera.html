@@ -42,10 +42,14 @@
     <!-- 카메라 화면 -->
     <div class="camera-box">
       <video id="video" autoplay playsinline muted></video>
+      <!-- 실시간 얼굴 탐지 박스 (camera.js 미리보기). 촬영 사진에는 들어가지 않는다 -->
+      <canvas class="overlay" id="overlay" aria-hidden="true"></canvas>
       <div class="camera-msg" id="cameraMsg">카메라 연결 중…</div>
       <span class="rec-badge" id="recBadge">촬영 중</span>
+      <span class="face-badge" id="faceBadge" role="status"></span>
       <div class="flash" id="flash"></div>
     </div>
+    <p class="preview-hint">박스는 화면을 줄여 실시간으로 탐지한 얼굴이에요. 출석은 원본 해상도 사진으로 따로 판정해요.</p>
 
     <!-- 지각 인정 시간: 촬영 시작 후 이 시간이 지나면 한 번 더 촬영한다 -->
     <div class="late-select">

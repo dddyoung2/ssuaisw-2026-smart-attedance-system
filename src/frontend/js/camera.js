@@ -6,6 +6,8 @@
 //         (강의실 카메라 연동은 추후 작업. 지금은 이 브라우저의 카메라로 찍는다)
 // 촬영 시작: POST /lectures/{id}/start → 즉시 1장 + 5분마다 POST /lectures/{id}/photos
 //          + 지각 인정 시간(촬영 시작 후 N분)이 지났을 때 1장 더
+// 미리보기: 카메라가 켜져 있는 동안 프레임을 줄여 POST /preview → 탐지된 얼굴 박스를 영상 위에 그린다
+//          (검출만, 출석 기록 없음. 출석 사진을 처리하는 동안은 멈춘다)
 
 /* ---------- 설정 ---------- */
 const INTERVAL_SEC = 300;    // 자동 촬영 주기(초) = 5분
@@ -21,6 +23,16 @@ const VIDEO_CONSTRAINTS = {
   width: { ideal: 4096 },
   height: { ideal: 2160 },
 };
+
+// 실시간 얼굴 탐지 미리보기.
+// 원본 해상도 검출은 CPU 에서 한 장에 약 20초라, 긴 변 960px 로 줄인 프레임으로 검출만 한다(약 0.5~1초).
+// 줄인 화면이라 작은(먼) 얼굴은 박스가 안 나올 수 있다. 출석 판정은 capture() 가 원본 해상도로 따로 한다.
+const PREVIEW_MAX_SIDE = 960;      // 서버 services/preview.py 와 같은 값
+const PREVIEW_JPEG_QUALITY = 0.7;
+const PREVIEW_GAP_MS = 100;        // 응답을 받고 다음 프레임을 보내기 전 쉬는 시간
+const PREVIEW_IDLE_MS = 500;       // 카메라 준비 전·탭 숨김·출석 확인 중일 때 다시 확인하는 간격
+const PREVIEW_RETRY_MS = 3000;     // 탐지 요청이 실패하면 이만큼 쉬고 다시 시도
+const BOX_COLOR = '#4ADE80';
 
 /* ---------- 요소 ---------- */
 const lectureInfo = document.getElementById('lectureInfo');
@@ -38,6 +50,9 @@ const shootInfo = document.getElementById('shootInfo');
 const recBadge = document.getElementById('recBadge');
 const canvas = document.getElementById('canvas');
 const flash = document.getElementById('flash');
+const overlay = document.getElementById('overlay');
+const faceBadge = document.getElementById('faceBadge');
+const previewCanvas = document.createElement('canvas');   // 미리보기용 축소 프레임 (화면에 안 붙임)
 
 /* ---------- 상태 ---------- */
 const lectureId = requireLectureId();   // 없으면 과목 목록으로 이동
@@ -50,6 +65,9 @@ let starting = false;    // start 요청 중 (중복 클릭 방지)
 let count = 0;           // 업로드 성공한 사진 수
 let lastResult = '';
 let resolutionText = ''; // 카메라가 실제로 준 해상도 (예: 1920×1080)
+let uploading = false;   // 출석 사진 처리 중 (이때는 미리보기를 멈춘다)
+let previewGen = 0;      // 출석 사진을 찍을 때마다 +1. 그 전에 보낸 미리보기 응답은 버린다
+let previewResult = null; // 마지막 미리보기 결과 {width, height, boxes}
 
 /* ---------- 지각 인정 시간 ---------- */
 for (let m = 1; m <= LATE_MIN_MAX; m++) lateSelect.add(new Option(`${m}분`, m));
@@ -162,6 +180,10 @@ async function capture() {
   form.append('photo', blob, 'capture.jpg');     // 파일명(확장자) 필수: 서버가 jpg/png 만 허용
 
   updateInfo('확인 중…');
+  // 출석 사진을 처리하는 동안(CPU 약 20초)은 미리보기를 멈춰 서버 CPU 를 출석 판정에 쓴다
+  uploading = true;
+  previewGen++;
+  clearPreview();
   try {
     // 사진은 서버에서 처리만 하고 저장하지 않는다
     const data = await api(`/lectures/${lectureId}/photos`, { method: 'POST', form });
@@ -173,6 +195,8 @@ async function capture() {
   } catch (e) {
     updateInfo(`실패: ${e.message}`);
     return false;
+  } finally {
+    uploading = false;
   }
 }
 
@@ -242,6 +266,92 @@ shootBtn.addEventListener('click', () => {
   else startShooting();
 });
 
+/* ---------- 실시간 얼굴 탐지 미리보기 ---------- */
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function clearPreview() {
+  previewResult = null;
+  faceBadge.textContent = '';
+  drawBoxes();
+}
+
+// 박스 그리기. 영상은 object-fit: cover 로 화면을 꽉 채우며 잘려 보이므로 같은 변환을 적용한다.
+function drawBoxes() {
+  const dpr = window.devicePixelRatio || 1;
+  const cw = overlay.clientWidth;
+  const ch = overlay.clientHeight;
+  const pw = Math.round(cw * dpr);
+  const ph = Math.round(ch * dpr);
+  if (overlay.width !== pw || overlay.height !== ph) {
+    overlay.width = pw;
+    overlay.height = ph;
+  }
+  const ctx = overlay.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, pw, ph);
+
+  const r = previewResult;
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!r || !vw || !r.width) return;
+  const s = Math.max(cw / vw, ch / vh);   // 원본 프레임 → 화면 (cover)
+  const ox = (cw - vw * s) / 2;
+  const oy = (ch - vh * s) / 2;
+  const k = (vw / r.width) * s;           // 미리보기 이미지 → 화면 (가로세로 비율은 원본과 같음)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.strokeStyle = BOX_COLOR;
+  ctx.lineWidth = 2;
+  for (const b of r.boxes) ctx.strokeRect(ox + b.x * k, oy + b.y * k, b.w * k, b.h * k);
+}
+
+// 현재 프레임을 긴 변 PREVIEW_MAX_SIDE 이하로 줄여 JPEG 로
+function previewFrame() {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const scale = Math.min(1, PREVIEW_MAX_SIDE / Math.max(vw, vh));
+  const w = Math.round(vw * scale);
+  const h = Math.round(vh * scale);
+  if (previewCanvas.width !== w || previewCanvas.height !== h) {
+    previewCanvas.width = w;
+    previewCanvas.height = h;
+  }
+  previewCanvas.getContext('2d').drawImage(video, 0, 0, w, h);
+  return new Promise(resolve => previewCanvas.toBlob(resolve, 'image/jpeg', PREVIEW_JPEG_QUALITY));
+}
+
+// 요청은 한 번에 하나만: 응답이 오면 다음 프레임을 보낸다 (갱신 간격 ≈ 서버 탐지 시간)
+async function previewLoop() {
+  for (;;) {
+    if (!video.videoWidth || document.hidden || uploading) {
+      await sleep(PREVIEW_IDLE_MS);
+      continue;
+    }
+    const gen = previewGen;
+    let wait = PREVIEW_GAP_MS;
+    try {
+      const blob = await previewFrame();
+      if (!blob) throw new Error('프레임 캡처 실패');
+      const form = new FormData();
+      form.append('photo', blob, 'frame.jpg');
+      const r = await api('/preview', { method: 'POST', form });
+      if (gen === previewGen && !uploading) {   // 그사이 출석 사진을 찍었으면 버림
+        previewResult = r;
+        faceBadge.textContent = `탐지된 얼굴 ${r.boxes.length}개`;
+        drawBoxes();
+      }
+    } catch (e) {
+      if (gen === previewGen && !uploading) {
+        clearPreview();
+        faceBadge.textContent = '얼굴 탐지 실패';
+      }
+      wait = PREVIEW_RETRY_MS;
+    }
+    await sleep(wait);
+  }
+}
+
+window.addEventListener('resize', drawBoxes);
+
 /* ---------- 시작 ---------- */
 async function init() {
   document.getElementById('backLink').href = `method.html?lecture=${lectureId}`;
@@ -255,4 +365,5 @@ async function init() {
 if (lectureId) {
   startCamera();
   init();
+  previewLoop();
 }

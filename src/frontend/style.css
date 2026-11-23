@@ -275,6 +275,20 @@ select {
 }
 @keyframes blink { 50% { opacity: .2; } }
 
+.overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.face-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 20px;
+}
+.face-badge:empty { display: none; }
+.preview-hint { font-size: 13px; color: var(--ink-sub); margin: -8px 0 16px; }
+
 .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 .flash.go { animation: flash .35s; }
 @keyframes flash { 0% { opacity: .7; } 100% { opacity: 0; } }
