@@ -60,6 +60,19 @@ class PhotoResultOut(BaseModel):
     summary: SummaryOut
 
 
+class BoxOut(BaseModel):
+    x: int
+    y: int
+    w: int
+    h: int
+
+
+class PreviewOut(BaseModel):
+    width: int  # 보낸 이미지의 가로 (박스 좌표 기준)
+    height: int
+    boxes: list[BoxOut]  # 탐지된 얼굴 박스, 신뢰도 높은 순
+
+
 class AttendanceStudentOut(BaseModel):
     student_id: str
     name: str

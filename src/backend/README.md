@@ -44,7 +44,7 @@ Python 3.10 이상이 필요합니다. Python 3.11(numpy 1.26.4)과 Python 3.14(
 
 ### seed가 만드는 예시 데이터 (`DATA_DIR`, 기본 `src/backend/data/`, git 제외)
 
-여러 번 실행해도 중복으로 쌓이지 않습니다(DB와 seed가 만든 사진을 지우고 다시 만듦).
+여러 번 실행해도 중복으로 쌓이지 않습니다(DB와 `demo/` 사진은 지우고 다시 만듦). 증명사진은 **없는 학생만** 합성 패턴으로 만들고, 이미 있는 사진은 그대로 둡니다.
 
 | 항목 | 내용 |
 |---|---|
@@ -52,9 +52,11 @@ Python 3.10 이상이 필요합니다. Python 3.11(numpy 1.26.4)과 Python 3.14(
 | room | `11101`, `21303`, `21304`, `21305`. `camera`는 카메라 연결 정보 자리(추후 연동, 화면에는 표시 안 함) |
 | lecture | 2026-09-01이 있는 주를 1주차로 **15주차까지**. 시스템프로그래밍은 **주 2회**(화·목, 21303), 알고리즘은 화(21304), 오픈소스기반기초설계는 수(21305) |
 | 오늘 회차 | 실행한 날에 정규 회차가 없는 과목에는 **오늘 날짜 회차를 하나 추가**합니다. 그래서 모든 과목에 오늘 회차가 있습니다. 차수(`session_no`)는 같은 주 안에서 날짜순으로 다시 매깁니다(예: 11/19(목) 실행 → 알고리즘 `12-1` 11/17(화), `12-2` 11/19(목)) |
-| student | 8명. 증명사진은 실제 얼굴이 아닌 **합성 패턴 이미지**(`photos/students/<학번>.png`)이고, 임베딩도 계산해서 넣음 |
+| student | 8명. 증명사진은 실제 얼굴이 아닌 **합성 패턴 이미지**(`photos/students/<학번>.png`)이고, 임베딩도 계산해서 넣음. 그 학번의 사진이 이미 있으면 그 사진을 그대로 씀 |
 | enrollment | 과목마다 4~5명 (여러 과목을 함께 듣는 학생 포함) |
 | demo/ | 데모용 단체 사진 4장 (아래 참고) |
+
+**실제 얼굴로 확인하려면** `photos/students/<학번>.png`를 실제 얼굴 사진(얼굴 1개)으로 바꾸고 seed를 다시 실행하세요. 사진은 유지되고 임베딩도 그 사진으로 계산됩니다(나머지 학생은 패턴이라 기본 엔진에서는 임베딩 실패로 나옴). 패턴으로 되돌리려면 그 파일을 지우고 seed를 다시 실행합니다. 실제 사진을 넣은 학생은 `demo/` 사진(패턴)과 매칭되지 않습니다.
 
 **더미 엔진에서 출석이 잡히는 걸 보려면**
 예시 증명사진과 `demo/` 사진은 합성 패턴이라 기본 엔진(`retinaface`)은 얼굴을 찾지 못합니다(학생 임베딩도 만들어지지 않음). 예시 데이터로 확인할 때는 `.env`에 `FACE_ENGINE=dummy`를 지정한 뒤 seed와 서버를 실행하세요.
@@ -76,7 +78,7 @@ Python 3.10 이상이 필요합니다. Python 3.11(numpy 1.26.4)과 Python 3.14(
 | 1. 과목 목록 (첫 화면) | `index.html` | `GET /courses` | `course.html?course=<과목코드>` |
 | 2. 과목 홈 = 회차 목록 | `course.html` | `GET /courses/{code}`, `GET /courses/{code}/lectures` | [출결 확인] → `method.html?lecture=<id>` |
 | 3. 출결 방식 선택 | `method.html` | `GET /lectures/{id}` | [전자 출결] → [카메라] → `camera.html?lecture=<id>` |
-| 4. 카메라 | `camera.html` | `GET /lectures/{id}`, `GET /rooms`, 촬영 시작 시 `POST /lectures/{id}/start` → 즉시 1장 + **5분마다** + **지각 인정 시간이 지났을 때** 1장 `POST /lectures/{id}/photos` | [출결 현황 보기] → `attendance.html?lecture=<id>` |
+| 4. 카메라 | `camera.html` | `GET /lectures/{id}`, `GET /rooms`, 카메라가 켜져 있는 동안 `POST /preview`(얼굴 박스 미리보기), 촬영 시작 시 `POST /lectures/{id}/start` → 즉시 1장 + **5분마다** + **지각 인정 시간이 지났을 때** 1장 `POST /lectures/{id}/photos` | [출결 현황 보기] → `attendance.html?lecture=<id>` |
 | 5. 출결 현황 | `attendance.html` | `GET /lectures/{id}/attendance` (10초마다) | – |
 
 - 선택한 회차는 URL 쿼리로 넘기고 localStorage에도 저장합니다. URL에 `lecture`가 없으면 마지막으로 고른 회차를 쓰고, 그것도 없으면 과목 목록으로 돌아갑니다.
@@ -84,6 +86,8 @@ Python 3.10 이상이 필요합니다. Python 3.11(numpy 1.26.4)과 Python 3.14(
 - 과목 홈: 주차 칸은 `<week>-<session_no>` 배지, 수업일 칸은 `9/1 (화)`와 강의실 번호. [수업일순]/[주차순] 토글은 화면에서 정렬만 바꿉니다. 오늘 회차 행은 분홍색으로 강조하고 그 행으로 스크롤합니다.
 - 카메라 촬영 시점: [촬영 시작] 즉시 1장, 이후 5분마다 1장, 그리고 **지각 인정 시간**(촬영 시작 후 1~20분, 1분 단위, 기본 10분)이 지났을 때 1장을 더 찍습니다. DB에 수업 시작 시간이 없어서 촬영 시작을 기준으로 합니다. 정기 촬영과 30초 안에 겹치면(예: 10분) 한 장만 찍습니다. 예) 7분 → 0, 5, 7, 10, 15…분 / 10분 → 0, 5, 10, 15…분. 촬영 중에는 지각 인정 시간을 바꿀 수 없고, 촬영을 멈췄다가 다시 시작하면 그때부터 다시 계산합니다.
 - 카메라: 강의실 기본값은 그 회차의 강의실입니다. 다른 강의실을 골라도 DB의 회차는 바뀌지 않습니다(어느 카메라로 찍을지만 고르는 것, 강의실 카메라 연동은 추후 작업이라 지금은 브라우저 카메라로 촬영).
+- 카메라 미리보기: 카메라가 켜져 있으면 프레임을 긴 변 960px로 줄여 `POST /preview`로 보내고, 탐지된 얼굴 박스를 영상 위에 그리며 "탐지된 얼굴 N개"를 표시합니다. 요청은 한 번에 하나씩(응답이 오면 다음 프레임)이라 CPU에서 약 1초마다 갱신됩니다. 출석 사진을 처리하는 동안과 탭이 안 보일 때는 멈춥니다.
+  - **미리보기 박스 ≠ 출석 판정.** 미리보기는 줄인 화면에서 검출만 하므로 작은(먼) 얼굴이 빠질 수 있습니다. 출석은 원본 해상도 사진으로 검출 → 정렬 → 인식을 따로 합니다. 예) 로컬 강의실 사진 1장: 원본 44개, 긴 변 960px 36개, 640px 22개.
 - 수동·큐알·코드 출결은 "준비 중" 안내만 합니다.
 
 ## 출석 처리
@@ -134,6 +138,7 @@ class ─1:N────┘                              │
 | POST | `/lectures/{lecture_id}/photos` | multipart `photo` (jpg/jpeg/png) → `{face_count, matched_count, summary:{total, present, absent}}` |
 | GET | `/lectures/{lecture_id}/attendance` | `{lecture:{…}, summary:{…}, students:[{student_id, name, present}]}` |
 | GET | `/rooms` | `[{room_no, camera}]` (화면은 `room_no`만 사용) |
+| POST | `/preview` | multipart `photo` (jpg/jpeg/png) → `{width, height, boxes:[{x, y, w, h}]}`. 검출만(인식·출석 기록 없음, 사진 저장 안 함). 긴 변 960px 초과면 줄여서 검출하고 좌표는 보낸 이미지 기준으로 돌려줌 |
 | GET | `/health` | `{status, face_engine, embedding_dim}` |
 
 - 없는 과목·회차는 404를 반환합니다.
@@ -153,12 +158,13 @@ src/backend/
 ├─ schemas.py                응답 형식
 ├─ face_engine.py            얼굴 엔진 등록·선택, 검출 결과(fd_pipeline) → 인식 연결, 더미 구현 (DB 접근 없음)
 ├─ engines/                  얼굴 검출·정렬·인식: detector.py, align.py, fd_pipeline.py, embedder.py, retinaface/·adaface/(모델 코드, weight/)
-├─ routers/                  courses.py, lectures.py, rooms.py (요청 접수)
+├─ routers/                  courses.py, lectures.py, rooms.py, preview.py (요청 접수)
 ├─ services/
 │  ├─ usaint.py              ★ usaint DB 를 읽고 쓰는 SQL 은 모두 여기에 (실제 usaint 연동 시 이 파일만 교체)
 │  ├─ recognition.py         1:1 매칭 (순수 계산)
 │  ├─ attendance.py          출석 처리 흐름 (start / 사진 / 현황)
-│  └─ storage.py             업로드 검증, 메모리 디코딩, 증명사진 읽기
+│  ├─ storage.py             업로드 검증, 메모리 디코딩, 증명사진 읽기
+│  └─ preview.py             카메라 미리보기: 축소 프레임에서 검출만
 └─ scripts/
    ├─ seed_usaint.py         데모용 usaint.db + 예시 데이터
    └─ compute_embeddings.py  학생 임베딩 (재)계산 — FR 모델을 바꾸면 실행

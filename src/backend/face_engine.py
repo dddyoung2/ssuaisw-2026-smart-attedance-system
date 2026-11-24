@@ -70,6 +70,13 @@ class FaceEngine:
         # 구현이 정규화를 빠뜨려도 안전하도록 한 번 더 정규화
         return (vec / norm).astype(np.float32)
 
+    def detect(self, photo: np.ndarray) -> list[BBox]:
+        """사진 한 장 → [검출 박스, ...]. 검출만 하고 정렬·인식은 하지 않는다(카메라 미리보기용)."""
+        _check_image(photo)
+        from .engines.fd_pipeline import detect_boxes
+
+        return detect_boxes(photo, detector=self.detector)
+
     def detect_and_embed(self, photo: np.ndarray) -> list[tuple[BBox, np.ndarray]]:
         """사진 한 장 → [(검출 박스, 임베딩), ...]. 검출·정렬은 fd_pipeline, 그 뒤 임베딩."""
         _check_image(photo)

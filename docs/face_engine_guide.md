@@ -23,10 +23,10 @@
 |---|---|
 | `engines/detector.py` | `RetinaFaceDetector`: 사진 → 박스, 5점 |
 | `engines/align.py` | `align_face`: 5점 → 정사각형 얼굴 / `to_xywh`: 박스 → `(x, y, w, h)` |
-| `engines/fd_pipeline.py` | `detect_and_align`: 검출 → 정렬을 이어 인식에 넘길 `(boxes, images)` 생성 / `get_detector`: 검출기를 한 번만 로드 |
+| `engines/fd_pipeline.py` | `detect_and_align`: 검출 → 정렬을 이어 인식에 넘길 `(boxes, images)` 생성 / `detect_boxes`: 검출만(카메라 미리보기용) / `get_detector`: 검출기를 한 번만 로드 |
 | `engines/embedder.py` | `AdaFaceEmbedder`: 정렬 얼굴 → 512차원 임베딩 / `get_recognizer`: 인식 모델을 한 번만 로드 |
 | `engines/adaface/` | AdaFace 백본(`net.py`, 공식 코드 그대로)과 가중치 로더(`model.py`, SHA-256 검사), `weight/` 가중치 위치 |
-| `face_engine.py` | `FaceEngine`: fd_pipeline 결과를 임베더에 넘기고 임베딩 형식 검사 / 엔진 등록·선택(`FACE_ENGINE`) |
+| `face_engine.py` | `FaceEngine`: fd_pipeline 결과를 임베더에 넘기고 임베딩 형식 검사(`detect_and_embed`), 검출만(`detect`, 미리보기) / 엔진 등록·선택(`FACE_ENGINE`) |
 
 - 얼굴 엔진은 **DB를 읽지 않습니다.** 사진을 받아 얼굴 임베딩 목록을 돌려주는 일만 합니다.
 - 수강생 임베딩 조회, 1:1 매칭, 출석 저장은 백엔드(`services/`)가 맡습니다.
@@ -164,5 +164,6 @@ python -m pytest tests/test_face_engine.py tests/test_align.py tests/test_detect
 | `test_align.py` | 정렬 결과의 크기·방향·배율 |
 | `test_detector.py` | 검출·인계 출력 규격. 실제 RetinaFace 테스트는 가중치와 `engines/retinaface/test/input-img/` 사진이 있을 때만 실행 |
 | `test_embedder.py` | 112 축소 방식, 임베더 연결 규격. 실제 AdaFace 테스트는 가중치가 있을 때만 실행 |
+| `test_preview.py` | 카메라 미리보기 `POST /preview`: 검출만, 큰 프레임 축소 후 좌표 복원, 출석·파일 변화 없음 |
 
 같은 사람/다른 사람 사진으로 THRESHOLD를 확인하는 테스트는 얼굴 사진이 필요해 저장소에 넣지 않습니다(개인정보). 로컬에서 따로 확인합니다.

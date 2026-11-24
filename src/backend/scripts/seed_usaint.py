@@ -10,6 +10,9 @@
 만드는 것 (DATA_DIR 아래, git 제외)
 - usaint.db                  : 6개 테이블 + 예시 데이터, 학생 임베딩까지 계산
 - photos/students/<학번>.png : 예시 증명사진. 실제 얼굴이 아닌 합성 패턴(개인정보 보호)
+                               이미 그 학번의 사진이 있으면 지우거나 덮어쓰지 않고 그대로 쓴다
+                               (실제 얼굴 사진을 넣어 두면 seed 를 다시 돌려도 유지되고 임베딩도 그 사진으로 계산).
+                               패턴으로 되돌리려면 그 파일을 지우고 다시 실행한다.
 - demo/*.png                 : 데모용 단체 사진. /docs 의 POST /lectures/{id}/photos 로 올려
                                더미 엔진에서도 출석이 잡히는 흐름을 볼 수 있다.
 
@@ -142,13 +145,19 @@ def seed(settings: Settings, today: dt.date | None = None, *, with_embeddings: b
     """usaint.db 를 새로 만들고 예시 데이터를 넣는다. 오늘 회차 정보를 돌려준다."""
     today = today or dt.date.today()
     settings.ensure_dirs()
-    _reset_png_dir(settings.student_photo_dir)
+    settings.student_photo_dir.mkdir(parents=True, exist_ok=True)
     _reset_png_dir(settings.demo_photo_dir)
 
-    # 예시 증명사진 / 데모 단체 사진 (합성 패턴)
+    # 예시 증명사진: 사진이 없는 학생만 합성 패턴으로 만든다 (이미 있는 사진은 그대로 둠)
     patterns = {sid: face_pattern(s) for sid, _, s in STUDENTS}
+    kept_photos = []
     for sid, arr in patterns.items():
-        Image.fromarray(arr).save(settings.student_photo_dir / f"{sid}.png")
+        path = settings.student_photo_dir / f"{sid}.png"
+        if path.exists():
+            kept_photos.append(sid)
+            continue
+        Image.fromarray(arr).save(path)
+    # 데모 단체 사진 (합성 패턴, 매번 새로 만듦)
     for filename, ids in DEMO_PHOTOS:
         Image.fromarray(np.hstack([patterns[i] for i in ids])).save(
             settings.demo_photo_dir / filename
@@ -197,6 +206,7 @@ def seed(settings: Settings, today: dt.date | None = None, *, with_embeddings: b
         "lecture_count": len(lectures),
         "todays_lectures": todays,
         "embedding_report": report,
+        "kept_photos": kept_photos,  # 이미 있어서 그대로 둔 증명사진의 학번
     }
 
 
@@ -218,6 +228,9 @@ def main(argv: list[str] | None = None) -> int:
     for lid, code, week, sess in result["todays_lectures"]:
         name, room = names[code]
         print(f"  lecture_id={lid}  {name}  {week}-{sess}  {room}")
+    kept = result["kept_photos"]
+    if kept:
+        print(f"기존 증명사진 유지 {len(kept)}명: {', '.join(kept)}")
     r = result["embedding_report"]
     if r is not None:
         print(f"임베딩: 성공 {r.ok} / 실패 {len(r.failed)}")
