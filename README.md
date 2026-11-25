@@ -188,7 +188,7 @@ DB_URL=
 DATA_DIR=src/backend/data
 CORS_ORIGINS=http://127.0.0.1:5500,http://localhost:5500
 FACE_ENGINE=retinaface
-THRESHOLD=0.5
+THRESHOLD=0.109
 MAX_UPLOAD_MB=10
 LOG_LEVEL=INFO
 ```
