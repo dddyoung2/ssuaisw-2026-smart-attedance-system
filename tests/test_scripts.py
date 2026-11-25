@@ -122,22 +122,22 @@ def test_seed_keeps_existing_student_photos(tmp_path):
 
     settings = make_settings(tmp_path)
     seed(settings, today=TODAY, with_embeddings=False)
-    mine = settings.student_photo_dir / "20231001.png"
+    mine = settings.student_photo_dir / "20181818.png"
     Image.fromarray(np.tile(np.arange(64, dtype=np.uint8)[:, None, None], (1, 64, 3))).save(mine)  # 바꿔 넣은 사진
     mine_bytes = mine.read_bytes()
-    (settings.student_photo_dir / "20231002.png").unlink()  # 지운 사진
+    (settings.student_photo_dir / "20191919.png").unlink()  # 지운 사진
 
     result = seed(settings, today=TODAY)
     assert mine.read_bytes() == mine_bytes  # 덮어쓰지 않음
-    assert "20231001" in result["kept_photos"] and "20231002" not in result["kept_photos"]
-    assert (settings.student_photo_dir / "20231002.png").exists()  # 없던 학생만 패턴으로 다시 만듦
+    assert "20181818" in result["kept_photos"] and "20191919" not in result["kept_photos"]
+    assert (settings.student_photo_dir / "20191919.png").exists()  # 없던 학생만 패턴으로 다시 만듦
     assert len(list(settings.student_photo_dir.glob("*.png"))) == 8
 
     # 임베딩은 유지한 사진으로 계산된다
     eng = make_engine(settings.db_url)
     with make_session_factory(eng)() as db:
         expected = create_face_engine("dummy").detect_and_embed(np.asarray(Image.open(mine).convert("RGB")))[0][1]
-        got = np.frombuffer(db.get(Student, "20231001").embedding, np.float32)
+        got = np.frombuffer(db.get(Student, "20181818").embedding, np.float32)
         assert np.allclose(got, expected)
     eng.dispose()
 
@@ -188,13 +188,13 @@ def test_compute_embeddings_after_model_change(tmp_path):
         assert up()["matched_count"] == 3
 
     # 증명사진이 없거나 얼굴이 1개가 아니면 NULL 로 바꾸고 실패 목록에 남김
-    (settings.student_photo_dir / "20231001.png").unlink()
+    (settings.student_photo_dir / "20181818.png").unlink()
     from PIL import Image
 
-    Image.fromarray(np.full((50, 50, 3), 9, np.uint8)).save(settings.student_photo_dir / "20231002.png")
+    Image.fromarray(np.full((50, 50, 3), 9, np.uint8)).save(settings.student_photo_dir / "20191919.png")
     with Session() as db:
         report = compute_all(db, settings, create_face_engine("dummy64"))
         db.commit()
-        assert sorted(sid for sid, _ in report.failed) == ["20231001", "20231002"]
-        assert db.get(Student, "20231001").embedding is None
+        assert sorted(sid for sid, _ in report.failed) == ["20181818", "20191919"]
+        assert db.get(Student, "20181818").embedding is None
     eng.dispose()

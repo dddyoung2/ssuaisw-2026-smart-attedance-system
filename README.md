@@ -133,16 +133,16 @@ Releases에서 가중치 2개를 받아 아래 경로에 둡니다. (git에는 �
 | 모델 | Release | 파일 → 둘 경로 |
 |---|---|---|
 | 얼굴 탐지 (RetinaFace) | [det-v1.0.0](https://github.com/dddyoung2/ssuaisw-2026-smart-attedance-system/releases/tag/det-v1.0.0) | `Resnet50_Final.pth` → `src/backend/engines/retinaface/weight/` |
-| 얼굴 인식 (AdaFace) | [AdaFace_weights_v1.0.0](https://github.com/dddyoung2/ssuaisw-2026-smart-attedance-system/releases/tag/AdaFace_weights_v1.0.0) | `adaface_ir101_webface12m_original.safetensors` → `src/backend/engines/adaface/weight/` |
+| 얼굴 인식 (AdaFace) | [AdaFace_weights_v1.0.0](https://github.com/dddyoung2/ssuaisw-2026-smart-attedance-system/releases/tag/AdaFace_weights_v1.0.0) | `adaface_weight_fined.pt` → `src/backend/engines/adaface/weight/adaface_weight.pt` (이름을 바꿔 저장) |
 
 GitHub CLI로 받을 때 (저장소 루트에서):
 
 ```bash
 gh release download det-v1.0.0 -p Resnet50_Final.pth -D src/backend/engines/retinaface/weight
-gh release download AdaFace_weights_v1.0.0 -p adaface_ir101_webface12m_original.safetensors -D src/backend/engines/adaface/weight
+gh release download AdaFace_weights_v1.0.0 -p adaface_weight_fined.pt -O src/backend/engines/adaface/weight/adaface_weight.pt
 ```
 
-AdaFace 가중치는 불러올 때 SHA-256을 확인합니다. 다른 파일이면 오류가 납니다.
+AdaFace 가중치는 파인튜닝 가중치이며, 불러올 때 SHA-256을 확인합니다. 다른 파일이면 오류가 납니다.
 
 ---
 
@@ -188,7 +188,7 @@ DB_URL=
 DATA_DIR=src/backend/data
 CORS_ORIGINS=http://127.0.0.1:5500,http://localhost:5500
 FACE_ENGINE=retinaface
-THRESHOLD=0.5
+THRESHOLD=0.109
 MAX_UPLOAD_MB=10
 LOG_LEVEL=INFO
 ```
@@ -218,5 +218,5 @@ LOG_LEVEL=INFO
 
 - RetinaFace 모델 코드·가중치: [biubug6/Pytorch_Retinaface](https://github.com/biubug6/Pytorch_Retinaface) (MIT), WIDER FACE로 학습
 - AdaFace 모델 코드: [mk-minchul/AdaFace](https://github.com/mk-minchul/AdaFace) (MIT, commit `c60eaa7`의 `net.py` 그대로)
-- AdaFace 가중치: [minchul/cvlface_adaface_ir101_webface12m](https://huggingface.co/minchul/cvlface_adaface_ir101_webface12m) (revision `54f602a`, 파일명만 바꾼 원본), WebFace12M으로 학습. 사용 시 AdaFace 논문(Kim et al., CVPR 2022) 인용과 학습 데이터 라이선스를 따라야 함
+- AdaFace 가중치: [minchul/cvlface_adaface_ir101_webface12m](https://huggingface.co/minchul/cvlface_adaface_ir101_webface12m) (revision `54f602a`, WebFace12M 사전학습)을 CelebAMask-HQ로 파인튜닝한 가중치. 사용 시 AdaFace 논문(Kim et al., CVPR 2022) 인용과 학습 데이터(WebFace12M, CelebAMask-HQ) 라이선스를 따라야 함 (CelebAMask-HQ는 비상업적 연구용)
 - 얼굴 정렬 규칙: CelebA-HQ 생성 방식 (Karras et al., Progressive Growing of GANs, 2018)

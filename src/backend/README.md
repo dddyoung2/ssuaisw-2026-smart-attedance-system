@@ -98,7 +98,7 @@ Python 3.10 이상이 필요합니다. Python 3.11(numpy 1.26.4)과 Python 3.14(
 | 사진 처리 | `POST /lectures/{id}/photos` | ENROLLMENT⋈STUDENT JOIN 한 번으로 **수강생 임베딩만** 조회 → 얼굴 엔진(검출 → 정렬·크롭 → 임베딩) → **1:1 매칭** → 매칭된 학생 `present=true`. **사진은 저장하지 않음** |
 | 출결 현황 | `GET /lectures/{id}/attendance` | ATTENDANCE⋈STUDENT → 학번, 이름, 출석 여부, 요약 |
 
-**1:1 매칭**: 모든 (얼굴, 수강생) 쌍의 코사인 유사도를 구하고, 유사도가 높은 쌍부터 "둘 다 아직 배정되지 않았으면" 배정합니다(greedy). 한 사진 안에서 얼굴 하나는 수강생 한 명에게만, 수강생 한 명은 얼굴 하나에만 배정됩니다. 유사도가 `THRESHOLD`(기본 0.5)보다 커야 인정합니다.
+**1:1 매칭**: 모든 (얼굴, 수강생) 쌍의 코사인 유사도를 구하고, 유사도가 높은 쌍부터 "둘 다 아직 배정되지 않았으면" 배정합니다(greedy). 한 사진 안에서 얼굴 하나는 수강생 한 명에게만, 수강생 한 명은 얼굴 하나에만 배정됩니다. 유사도가 `THRESHOLD`(기본 0.109)보다 커야 인정합니다.
 
 **OR 유지**: 한 번 `present=true`가 되면, 이후 사진에서 인식되지 않아도 true로 남습니다. false로 되돌리는 경로는 없습니다.
 
@@ -185,7 +185,7 @@ src/frontend/
 | `DATA_DIR` | `src/backend/data` | usaint.db, 예시 증명사진, 데모 사진 (상대경로는 저장소 루트 기준) |
 | `CORS_ORIGINS` | `http://127.0.0.1:5500,http://localhost:5500` | 쉼표로 구분 |
 | `FACE_ENGINE` | `retinaface` | 얼굴 엔진 ([가이드](../../docs/face_engine_guide.md)). `retinaface`는 검출(RetinaFace)·인식(AdaFace) 가중치 2개 필요, `dummy`는 가중치 없이 테스트·예시 데이터용 |
-| `THRESHOLD` | `0.5` | 코사인 유사도가 이 값보다 커야 매칭 |
+| `THRESHOLD` | `0.109` | 코사인 유사도가 이 값보다 커야 매칭 |
 | `MAX_UPLOAD_MB` | `10` | 업로드 최대 크기 (카메라 원본 해상도 사진, 최대 4K JPEG) |
 
 ## 설계상 한계
@@ -196,4 +196,4 @@ src/frontend/
 - **지각 구분 없음**: 지각 인정 시간이 지난 뒤 처음 인식된 학생도 `present=true`(출석)로 기록됩니다. DB에 지각 상태가 없습니다.
 - **수동 수정 없음**: 교수가 출석을 직접 고치는 API는 없습니다. 인식되지 않은 학생은 결석으로 남습니다.
 - **수강 명단 기준**: 수강생만 비교하므로, 등록되지 않은 사람이나 다른 분반 학생은 매칭되지 않습니다(의도한 동작).
-- 기본 엔진 `retinaface`(RetinaFace + AdaFace)의 `THRESHOLD=0.5`는 임시값입니다. 실제 강의실 사진으로 다시 정해야 합니다.
+- 기본 엔진 `retinaface`(RetinaFace + AdaFace)의 `THRESHOLD=0.109`는 AdaFace 파인튜닝 가중치의 학습 설정값입니다. 실제 강의실 사진으로 확인해야 합니다.

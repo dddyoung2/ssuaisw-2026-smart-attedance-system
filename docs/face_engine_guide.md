@@ -1,7 +1,7 @@
 # 얼굴 엔진 연결 가이드
 
 얼굴 검출·인식 모델이 백엔드에 연결되는 구조와 규칙입니다.
-**검출은 RetinaFace(ResNet-50), 인식(FR)은 AdaFace(IR101, WebFace12M)로 연결되어 있습니다**(`src/backend/engines/`). 기본 엔진 `retinaface`가 두 모델을 함께 씁니다.
+**검출은 RetinaFace(ResNet-50), 인식(FR)은 AdaFace(IR101, 파인튜닝 가중치)로 연결되어 있습니다**(`src/backend/engines/`). 기본 엔진 `retinaface`가 두 모델을 함께 씁니다.
 
 백엔드의 다른 부분(DB, API, 매칭, 출석 저장)은 수정할 필요가 없습니다. 인식 모델을 바꿀 때는 `FaceEmbedder` 하나만 구현해 `face_engine.py`에 등록하면 됩니다.
 
@@ -94,13 +94,14 @@ register_engine("retinaface", _make_retinaface)
 - AdaFace도 같은 방식으로, 처음 임베딩할 때 `embedder.get_recognizer()`가 **한 번만** 불러옵니다. 그래서 가중치가 없어도 서버는 켜지고, 사진을 처리할 때 오류가 납니다.
 - `retinaface` 엔진은 가중치 파일 2개가 있어야 동작합니다. 받는 방법은 루트 README의 "가중치 다운로드"를 따릅니다.
   - `src/backend/engines/retinaface/weight/Resnet50_Final.pth`
-  - `src/backend/engines/adaface/weight/adaface_ir101_webface12m_original.safetensors`
+  - `src/backend/engines/adaface/weight/adaface_weight.pt`
 
 ## 6. AdaFace 인식 (engines/embedder.py)
 
 | 항목 | 값 |
 |---|---|
-| 모델 | AdaFace IR101, WebFace12M 사전학습 (CVLFace 원본 가중치, 미세조정 없음) |
+| 모델 | AdaFace IR101, WebFace12M 사전학습 가중치를 CelebAMask-HQ로 파인튜닝 (`adaface_weight.pt`) |
+| 가중치 형식 | PyTorch checkpoint. `model_state_dict`만 꺼내 씀 (`torch.load(weights_only=True)`) |
 | 입력 | 정렬 얼굴 `(S, S, 3)` RGB 크롭 **전체를 112×112로 축소** (S > 112면 `INTER_AREA`, 아니면 `INTER_LINEAR`) |
 | 색 순서 | **RGB 그대로** (BGR 변환 없음) |
 | 정규화 | `pixel / 127.5 - 1` (로더 `encode_rgb` 안에서 함) |

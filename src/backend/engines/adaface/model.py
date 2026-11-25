@@ -1,20 +1,18 @@
-"""Original CVLFace IR101 weights with the official AdaFace backbone.
+"""Fine-tuned AdaFace IR101 weights with the official AdaFace backbone.
 
 팀 FR 꾸러미(adaface_original)의 adaface_eval/model.py 를 옮긴 것.
-바꾼 곳: net import(상대 경로), 가중치 기본 경로(같은 폴더의 weight/).
+바꾼 곳: net import(상대 경로), 가중치 기본 경로(같은 폴더의 weight/),
+가중치를 파인튜닝 checkpoint(adaface_weight.pt, model_state_dict)로 교체.
 """
 import hashlib
-import json
-import math
 from pathlib import Path
-import struct
 
 import numpy as np
 import torch
 from .net import build_model
 
-WEIGHT_PATH = Path(__file__).resolve().parent / 'weight' / 'adaface_ir101_webface12m_original.safetensors'
-EXPECTED_SHA256 = '2ea535a43877bd3de8091903935c783ce335be66a9f8917fae9a7a18ae4bbf56'
+WEIGHT_PATH = Path(__file__).resolve().parent / 'weight' / 'adaface_weight.pt'
+EXPECTED_SHA256 = '006b0d4845b0551075cccbaef5514fa7a8eecb8c95a145d1349bd19f61cbabc4'
 
 
 def file_sha256(filename):
@@ -26,29 +24,18 @@ def file_sha256(filename):
 
 
 def read_weights(filename):
-    """Read the verified F32/I64 safetensors file; no external model code is executed."""
+    """Read the verified fine-tuned checkpoint (.pt) and return its model_state_dict.
+
+    weights_only=True: 텐서·기본 자료형만 읽고 pickle 안의 코드는 실행하지 않는다.
+    """
     filename = Path(filename)
     actual = file_sha256(filename)
     if actual != EXPECTED_SHA256:
-        raise ValueError(f'Expected ORIGINAL IR101/WebFace12M weights; SHA-256 mismatch: {actual}')
-    types = {'F32':(torch.float32,4), 'I64':(torch.int64,8)}
-    state = {}
-    with filename.open('rb') as handle:
-        length = struct.unpack('<Q',handle.read(8))[0]
-        header = json.loads(handle.read(length))
-        for name,entry in header.items():
-            if name=='__metadata__':
-                continue
-            dtype,size = types[entry['dtype']]
-            start,stop = entry['data_offsets']
-            if stop-start != math.prod(entry['shape'])*size:
-                raise ValueError(f'Invalid tensor byte size: {name}')
-            handle.seek(8+length+start)
-            raw = handle.read(stop-start)
-            if len(raw)!=stop-start:
-                raise ValueError(f'Truncated tensor: {name}')
-            state[name.removeprefix('model.net.')] = torch.frombuffer(bytearray(raw),dtype=dtype).reshape(entry['shape'])
-    return state
+        raise ValueError(f'Expected fine-tuned AdaFace weights (adaface_weight.pt); SHA-256 mismatch: {actual}')
+    checkpoint = torch.load(filename, map_location='cpu', weights_only=True)
+    if not isinstance(checkpoint, dict) or 'model_state_dict' not in checkpoint:
+        raise ValueError('Expected a checkpoint dict with "model_state_dict"')
+    return checkpoint['model_state_dict']
 
 
 class AdaFaceRecognizer:
