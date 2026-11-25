@@ -70,6 +70,8 @@ class AdaFaceRecognizer:
             values=features.float().cpu().numpy()
             if not np.isfinite(values).all():
                 raise ValueError('Non-finite model features')
+            if np.max(np.abs(np.linalg.norm(values,axis=1)-1))>=1e-4:
+                raise ValueError('Expected unit-length model embeddings')
             result.append(values)
         return np.concatenate(result,axis=0) if result else np.empty((0,512),np.float32)
 

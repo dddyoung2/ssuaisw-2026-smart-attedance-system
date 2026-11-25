@@ -156,6 +156,34 @@ def test_seed_demo_photos_mark_attendance(tmp_path):
         assert r["summary"] == {"total": 4, "present": 3, "absent": 1}
 
 
+def test_compute_embeddings_uses_anchor_embedding(tmp_path):
+    """학생 증명사진은 등록용 임베딩(embed_anchor)으로 계산한다. 출석 사진 쪽(embed)과 구분."""
+
+    class AnchorMarked(FaceEmbedder):
+        dim = 128
+
+        def embed(self, face_image):
+            return DummyEmbedder().embed(face_image)
+
+        def embed_anchor(self, face_image):
+            vec = np.zeros(128, np.float32)
+            vec[5] = 1.0
+            return vec
+
+    register_engine("anchor_marked", lambda: FaceEngine("anchor_marked", DummyDetector(), AnchorMarked()))
+    settings = make_settings(tmp_path, face_engine="anchor_marked")
+    seed(settings, today=TODAY, with_embeddings=False)
+    eng = make_engine(settings.db_url)
+    with make_session_factory(eng)() as db:
+        report = compute_all(db, settings, create_face_engine("anchor_marked"))
+        db.commit()
+        assert (report.ok, report.failed) == (8, [])
+        for s in db.scalars(select(Student)):
+            got = np.frombuffer(s.embedding, np.float32)
+            assert got[5] == 1.0 and np.count_nonzero(got) == 1
+    eng.dispose()
+
+
 def test_compute_embeddings_after_model_change(tmp_path):
     """FR 모델(임베딩 차원)이 바뀌면 compute_embeddings 로 다시 계산해야 매칭된다."""
 
