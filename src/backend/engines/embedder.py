@@ -26,7 +26,7 @@ def to_input(face_rgb):
     return cv2.resize(face_rgb, (INPUT_SIZE, INPUT_SIZE), interpolation=interp)
 
 class AdaFaceEmbedder(FaceEmbedder):
-    """AdaFace IR101 / WebFace12M (CVLFace 원본 가중치). 입력 RGB, pixel / 127.5 - 1 은 로더가 한다."""
+    """AdaFace IR101 (파인튜닝 가중치 adaface_weight.pt). 입력 RGB, pixel / 127.5 - 1 은 로더가 한다."""
 
     dim = 512
 
