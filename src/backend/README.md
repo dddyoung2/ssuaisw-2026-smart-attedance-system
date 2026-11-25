@@ -167,7 +167,7 @@ src/backend/
 │  └─ preview.py             카메라 미리보기: 축소 프레임에서 검출만
 └─ scripts/
    ├─ seed_usaint.py         데모용 usaint.db + 예시 데이터
-   └─ compute_embeddings.py  학생 임베딩 (재)계산 — FR 모델을 바꾸면 실행
+   └─ compute_embeddings.py  학생 임베딩 (재)계산(증명사진 여러 크기 평균) — FR 모델·전처리를 바꾸면 실행
 src/frontend/
 ├─ index.html                1. 과목 목록
 ├─ course.html               2. 과목 홈 (회차 목록)
