@@ -8,6 +8,8 @@ FR(얼굴 인식) 모델을 바꾸면 이전 임베딩과 비교할 수 없으�
     python -m backend.scripts.compute_embeddings --dry-run    # 저장하지 않고 결과만 확인
     python -m backend.scripts.compute_embeddings --engine dummy
 
+증명사진 → 검출·정렬(CelebA-HQ 크롭) → 등록용 임베딩(engine.embed_anchor).
+AdaFace 는 크롭 원본과 여러 크기로 줄인 뷰의 임베딩을 평균 낸다(engines/embedder.py).
 증명사진에서 얼굴이 정확히 1개가 아니면 그 학생의 임베딩은 NULL 로 바꾸고 목록으로 알려준다
 (NULL 인 학생은 매칭에서 빠진다 → 증명사진 확인 필요).
 """
@@ -41,7 +43,7 @@ def compute_all(db: Session, settings: Settings, engine: FaceEngine) -> Report:
     for s in usaint.students_with_photo(db):
         try:
             image = storage.load_image(settings, s.photo_path)
-            faces = engine.detect_and_embed(image)
+            faces = engine.detect_and_embed_anchor(image)
             if len(faces) != 1:
                 raise ValueError(f"얼굴 {len(faces)}개 검출")
             usaint.set_student_embedding(db, s.student_id, to_blob(faces[0][1]))

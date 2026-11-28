@@ -16,7 +16,7 @@
                                       │     ① engines/detector.py  검출 (박스 + 5점)
                                       │     ② engines/align.py     정렬·크롭 (CelebA-HQ 방식, 리사이즈 없음)
                                       │
-                                      └─ ③ engines/embedder.py   임베딩 (AdaFace, 112로 리사이즈는 여기서)
+                                      └─ ③ engines/embedder.py   임베딩 (AdaFace, Bicubic 112 리사이즈는 여기서)
 ```
 
 | 파일 | 역할 |
@@ -24,13 +24,13 @@
 | `engines/detector.py` | `RetinaFaceDetector`: 사진 → 박스, 5점 |
 | `engines/align.py` | `align_face`: 5점 → 정사각형 얼굴 / `to_xywh`: 박스 → `(x, y, w, h)` |
 | `engines/fd_pipeline.py` | `detect_and_align`: 검출 → 정렬을 이어 인식에 넘길 `(boxes, images)` 생성 / `detect_boxes`: 검출만(카메라 미리보기용) / `get_detector`: 검출기를 한 번만 로드 |
-| `engines/embedder.py` | `AdaFaceEmbedder`: 정렬 얼굴 → 512차원 임베딩 / `get_recognizer`: 인식 모델을 한 번만 로드 |
-| `engines/adaface/` | AdaFace 백본(`net.py`, 공식 코드 그대로)과 가중치 로더(`model.py`, SHA-256 검사), `weight/` 가중치 위치 |
-| `face_engine.py` | `FaceEngine`: fd_pipeline 결과를 임베더에 넘기고 임베딩 형식 검사(`detect_and_embed`), 검출만(`detect`, 미리보기) / 엔진 등록·선택(`FACE_ENGINE`) |
+| `engines/embedder.py` | `AdaFaceEmbedder`: 정렬 얼굴 → 512차원 임베딩(`embed`, 여러 얼굴 한 번에 `embed_batch`, 학생 등록용 여러 크기 평균 `embed_anchor`) / `to_input`·`anchor_views`: 전처리 / `get_recognizer`: 인식 모델을 한 번만 로드 |
+| `engines/adaface/` | AdaFace 백본(`net.py`, 공식 코드 그대로)과 가중치 로더(`model.py`), `weight/` 가중치 위치 |
+| `face_engine.py` | `FaceEngine`: fd_pipeline 결과를 임베더에 넘기고 임베딩 형식 검사(출석 사진 `detect_and_embed`, 학생 증명사진 `detect_and_embed_anchor`), 검출만(`detect`, 미리보기) / 엔진 등록·선택(`FACE_ENGINE`) |
 
 - 얼굴 엔진은 **DB를 읽지 않습니다.** 사진을 받아 얼굴 임베딩 목록을 돌려주는 일만 합니다.
 - 수강생 임베딩 조회, 1:1 매칭, 출석 저장은 백엔드(`services/`)가 맡습니다.
-- 학생 증명사진 임베딩도 같은 엔진으로 계산합니다(`scripts/compute_embeddings.py`). 그래야 같은 공간의 벡터끼리 비교됩니다.
+- 학생 증명사진 임베딩도 같은 엔진으로 계산합니다(`scripts/compute_embeddings.py`, `detect_and_embed_anchor`). 그래야 같은 공간의 벡터끼리 비교됩니다.
 
 ## 2. 검출 출력 (engines/detector.py)
 
@@ -102,14 +102,17 @@ register_engine("retinaface", _make_retinaface)
 |---|---|
 | 모델 | AdaFace IR101, WebFace12M 사전학습 가중치를 CelebAMask-HQ로 파인튜닝 (`adaface_weight.pt`) |
 | 가중치 형식 | PyTorch checkpoint. `model_state_dict`만 꺼내 씀 (`torch.load(weights_only=True)`) |
-| 입력 | 정렬 얼굴 `(S, S, 3)` RGB 크롭 **전체를 112×112로 축소** (S > 112면 `INTER_AREA`, 아니면 `INTER_LINEAR`) |
+| 입력 | 정렬 얼굴 RGB 크롭 **전체를 Bicubic으로 112×112** (`to_input`, 정사각형이 아니면 가로·세로를 각각 맞춤) |
+| 출석 사진 얼굴 | 한 사진의 얼굴들을 32개씩 묶어 한 번에 임베딩 (`embed_batch`) |
+| 학생 증명사진 | **여러 크기 평균** (`embed_anchor`): 크롭 원본 1장 + 16·24·32·48·64·96·128·256·512 중 크롭의 min(가로, 세로) 이하 크기로 AREA 축소한 뷰 → 각각 Bicubic 112 → 임베딩 평균 → L2 정규화 |
 | 색 순서 | **RGB 그대로** (BGR 변환 없음) |
 | 정규화 | `pixel / 127.5 - 1` (로더 `encode_rgb` 안에서 함) |
-| 출력 | 512차원, L2 정규화 |
-| 가중치 검사 | 불러올 때 SHA-256을 확인하고, 다른 파일이면 오류 |
+| 출력 | 512차원, L2 정규화 (모델 출력 길이가 1이 아니면 오류) |
+| 가중치 읽기 | checkpoint의 `model_state_dict`만 읽음 (`weights_only=True`, pickle 안 코드는 실행하지 않음) |
 
-- 크롭은 ArcFace 5점 정렬이 아니라 CelebA-HQ 방식(얼굴 주변이 더 넓음)을 그대로 축소합니다. LFW 50쌍 확인에서 원본 5점 정렬보다 같은 사람 유사도가 약 0.035 낮았고, 같은 사람/다른 사람 구분(AUC)은 같았습니다. 실제 강의실 사진에서 성능이 낮으면 이 축소 방식을 바꿉니다.
-- CPU에서 얼굴 1개당 약 0.1초, 가중치 첫 로드는 수 초 걸립니다. 로더가 PyTorch CPU 스레드를 4개로 정합니다.
+- 전처리는 FR 쪽 실사용 코드(FR_draft `fr_draft/attendance.py`의 `model_input`, `anchor_views`)와 같습니다. FR이 임계값 0.109를 정할 때 쓴 전처리와 맞추기 위함입니다.
+- 크롭은 ArcFace 5점 정렬이 아니라 CelebA-HQ 방식(머리카락까지 들어가는 넉넉한 크롭, FR 요청)을 그대로 112로 맞춥니다.
+- CPU에서 얼굴 1개당 약 0.1초, 가중치 첫 로드는 수 초 걸립니다. 학생 1명 등록은 뷰 수(최대 10개)만큼 임베딩합니다. 로더가 PyTorch CPU 스레드를 4개로 정합니다.
 
 ### 다른 인식 모델로 바꿀 때
 
@@ -140,7 +143,7 @@ python -m backend.scripts.compute_embeddings             # 실제 저장
 
 - 매칭 조건은 `코사인 유사도 > THRESHOLD`입니다.
 - 한 사진 안에서 얼굴 하나는 수강생 한 명에게만, 수강생 한 명은 얼굴 하나에만 배정됩니다. 유사도가 높은 쌍부터 배정합니다.
-- 지금 기본값 `0.5`는 **임시값**입니다. AdaFace 원배포의 참고값은 `0.109`(VGGFace2 기준)입니다. 실제 강의실 사진과 증명사진으로 같은 사람/다른 사람 유사도 분포를 확인해 정해야 합니다.
+- 지금 기본값 `0.109`는 AdaFace 파인튜닝 가중치의 학습 설정값입니다(VGGFace2 기준 공개 참고값과 같음). 실제 강의실 사진과 증명사진으로 같은 사람/다른 사람 유사도 분포를 확인해야 합니다.
 
 ## 9. 더미 엔진 (테스트·CI용, 유지)
 
@@ -164,7 +167,7 @@ python -m pytest tests/test_face_engine.py tests/test_align.py tests/test_detect
 | `test_face_engine.py` | 엔진 등록·선택(서버 시작 때 모델을 불러오지 않는지), 임베딩 검사, 더미 엔진, 1:1 매칭 |
 | `test_align.py` | 정렬 결과의 크기·방향·배율 |
 | `test_detector.py` | 검출·인계 출력 규격. 실제 RetinaFace 테스트는 가중치와 `engines/retinaface/test/input-img/` 사진이 있을 때만 실행 |
-| `test_embedder.py` | 112 축소 방식, 임베더 연결 규격. 실제 AdaFace 테스트는 가중치가 있을 때만 실행 |
+| `test_embedder.py` | Bicubic 112 변환, 여러 크기 뷰 규칙·평균, 얼굴 묶음 임베딩, 임베더 연결 규격. 실제 AdaFace 테스트는 가중치가 있을 때만 실행 |
 | `test_preview.py` | 카메라 미리보기 `POST /preview`: 검출만, 큰 프레임 축소 후 좌표 복원, 출석·파일 변화 없음 |
 
 같은 사람/다른 사람 사진으로 THRESHOLD를 확인하는 테스트는 얼굴 사진이 필요해 저장소에 넣지 않습니다(개인정보). 로컬에서 따로 확인합니다.

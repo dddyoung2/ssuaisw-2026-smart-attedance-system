@@ -89,7 +89,7 @@ ssuaisw-2026-smart-attedance-system/
 │  │  │  ├─detector.py                # 검출: 박스·5점 랜드마크
 │  │  │  ├─align.py                   # 정렬·크롭 (CelebA-HQ 방식, 리사이즈 없음)
 │  │  │  ├─fd_pipeline.py             # 검출 → 정렬, 인식 인계 출력 (박스 좌표·정렬 이미지 리스트)
-│  │  │  └─embedder.py                # 인식: 정렬 얼굴 → 112 축소 → AdaFace 512차원 임베딩
+│  │  │  └─embedder.py                # 인식: 정렬 얼굴 → Bicubic 112 → AdaFace 512차원 임베딩 (증명사진은 여러 크기 평균)
 │  │  ├─routers                       # API: 과목·회차 목록(courses), 회차 시작·사진·출결(lectures), 강의실(rooms), 카메라 미리보기(preview)
 │  │  ├─services                      # 출석 처리, 1:1 매칭, usaint DB 조회, 업로드 검증, 미리보기 검출
 │  │  └─scripts                       # 학생 임베딩 계산(compute_embeddings), 예시 DB 생성(seed_usaint)
@@ -142,7 +142,7 @@ gh release download det-v1.0.0 -p Resnet50_Final.pth -D src/backend/engines/reti
 gh release download AdaFace_weights_v1.0.0 -p adaface_weight_fined.pt -O src/backend/engines/adaface/weight/adaface_weight.pt
 ```
 
-AdaFace 가중치는 파인튜닝 가중치이며, 불러올 때 SHA-256을 확인합니다. 다른 파일이면 오류가 납니다.
+AdaFace 가중치는 파인튜닝 가중치이며, 불러올 때 `model_state_dict`만 읽습니다.
 
 ---
 

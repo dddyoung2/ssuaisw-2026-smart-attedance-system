@@ -85,6 +85,33 @@ def test_engine_normalizes_embedding_of_aligned_square_face():
     assert h == w and c == 3  # 임베더는 fd_pipeline 이 정렬한 정사각형 얼굴을 받는다
 
 
+def test_default_batch_and_anchor_match_single_embed():
+    """embed_batch·embed_anchor 를 따로 구현하지 않은 임베더(더미 등)는 embed 와 같은 결과."""
+    eng = create_face_engine("dummy")
+    faces = [face_array(i) for i in range(3)]
+    many = eng.embed_many(faces)
+    assert len(many) == 3
+    for face, vec in zip(faces, many):
+        assert np.array_equal(vec, eng.embed(face))
+        assert np.array_equal(eng.embed_anchor(face), eng.embed(face))
+    assert eng.embed_many([]) == []
+
+
+def test_engine_rejects_wrong_batch_count():
+    class Short(FaceEmbedder):
+        dim = 4
+
+        def embed(self, face_image):
+            return np.array([1, 0, 0, 0], np.float32)
+
+        def embed_batch(self, face_images):
+            return np.zeros((len(face_images) - 1, 4), np.float32)
+
+    photo = np.hstack([face_array(i, 100) for i in range(2)])
+    with pytest.raises(ValueError, match="개수"):
+        FaceEngine("t", DummyDetector(), Short()).detect_and_embed(photo)
+
+
 # ---------- 1:1 매칭 ----------
 def _gallery(ids, vecs, dim=4):
     return build_gallery([(i, to_blob(np.asarray(v, np.float32))) for i, v in zip(ids, vecs)], dim)

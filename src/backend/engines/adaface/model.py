@@ -4,7 +4,6 @@
 바꾼 곳: net import(상대 경로), 가중치 기본 경로(같은 폴더의 weight/),
 가중치를 파인튜닝 checkpoint(adaface_weight.pt, model_state_dict)로 교체.
 """
-import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -12,26 +11,14 @@ import torch
 from .net import build_model
 
 WEIGHT_PATH = Path(__file__).resolve().parent / 'weight' / 'adaface_weight.pt'
-EXPECTED_SHA256 = '006b0d4845b0551075cccbaef5514fa7a8eecb8c95a145d1349bd19f61cbabc4'
-
-
-def file_sha256(filename):
-    digest = hashlib.sha256()
-    with Path(filename).open('rb') as handle:
-        for block in iter(lambda: handle.read(8*1024*1024), b''):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def read_weights(filename):
-    """Read the verified fine-tuned checkpoint (.pt) and return its model_state_dict.
+    """Read the fine-tuned checkpoint (.pt) and return its model_state_dict.
 
     weights_only=True: 텐서·기본 자료형만 읽고 pickle 안의 코드는 실행하지 않는다.
     """
     filename = Path(filename)
-    actual = file_sha256(filename)
-    if actual != EXPECTED_SHA256:
-        raise ValueError(f'Expected fine-tuned AdaFace weights (adaface_weight.pt); SHA-256 mismatch: {actual}')
     checkpoint = torch.load(filename, map_location='cpu', weights_only=True)
     if not isinstance(checkpoint, dict) or 'model_state_dict' not in checkpoint:
         raise ValueError('Expected a checkpoint dict with "model_state_dict"')
@@ -54,7 +41,6 @@ class AdaFaceRecognizer:
         self.model = build_model('ir_101')
         self.model.load_state_dict(read_weights(self.weights),strict=True)
         self.model.to(self.device).eval().requires_grad_(False)
-        self.sha256 = EXPECTED_SHA256
 
     @torch.inference_mode()
     def encode_rgb(self,images,batch_size=32):
@@ -70,6 +56,8 @@ class AdaFaceRecognizer:
             values=features.float().cpu().numpy()
             if not np.isfinite(values).all():
                 raise ValueError('Non-finite model features')
+            if np.max(np.abs(np.linalg.norm(values,axis=1)-1))>=1e-4:
+                raise ValueError('Expected unit-length model embeddings')
             result.append(values)
         return np.concatenate(result,axis=0) if result else np.empty((0,512),np.float32)
 

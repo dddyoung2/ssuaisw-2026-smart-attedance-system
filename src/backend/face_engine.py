@@ -13,6 +13,8 @@
   정렬 얼굴 : (S, S, 3) uint8 RGB 정사각형, CelebA-HQ 방식, 리사이즈 없음 (engines/align.py)
   embed()   : 정렬 얼굴 → shape (D,) float32, L2 정규화된 벡터.
               모델 입력 크기에 맞춘 리사이즈 등 전처리는 임베더 안에서 한다.
+  embed_batch()  : 정렬 얼굴 여러 개 → (N, D). 출석 사진의 얼굴들을 한 번에 처리(기본: embed 반복).
+  embed_anchor() : 학생 증명사진(등록)용 임베딩(기본: embed 와 같음). AdaFace 는 여러 크기 평균.
 
 새 구현은 register_engine("이름", 팩토리)로 등록하고 환경변수 FACE_ENGINE=이름 으로 고른다.
 """
@@ -41,6 +43,16 @@ class FaceEmbedder(ABC):
     def embed(self, face_image: np.ndarray) -> np.ndarray:
         """정렬된 얼굴 RGB uint8 (S, S, 3), 리사이즈 전 → L2 정규화된 (dim,) float32 벡터."""
 
+    def embed_batch(self, face_images: list[np.ndarray]) -> np.ndarray:
+        """정렬 얼굴 여러 개 → (N, dim). 한 번에 처리할 수 있는 모델은 덮어쓴다."""
+        if not face_images:
+            return np.zeros((0, self.dim), np.float32)
+        return np.stack([np.asarray(self.embed(f), dtype=np.float32).reshape(-1) for f in face_images])
+
+    def embed_anchor(self, face_image: np.ndarray) -> np.ndarray:
+        """학생 증명사진(등록)용 임베딩. 기본은 embed 와 같다."""
+        return self.embed(face_image)
+
 
 # ---------------------------------------------------------------------------
 # 엔진: 검출·정렬(engines/fd_pipeline) + 임베더를 묶고, 출력 형식을 검증한다.
@@ -57,9 +69,8 @@ class FaceEngine:
     def dim(self) -> int:
         return int(self.embedder.dim)
 
-    def embed(self, face_image: np.ndarray) -> np.ndarray:
-        _check_image(face_image)
-        vec = np.asarray(self.embedder.embed(face_image), dtype=np.float32).reshape(-1)
+    def _checked(self, vec) -> np.ndarray:
+        vec = np.asarray(vec, dtype=np.float32).reshape(-1)
         if vec.shape[0] != self.dim:
             raise ValueError(f"임베딩 차원 불일치: embedder.dim={self.dim}, 실제={vec.shape[0]}")
         if not np.all(np.isfinite(vec)):
@@ -70,6 +81,26 @@ class FaceEngine:
         # 구현이 정규화를 빠뜨려도 안전하도록 한 번 더 정규화
         return (vec / norm).astype(np.float32)
 
+    def embed(self, face_image: np.ndarray) -> np.ndarray:
+        _check_image(face_image)
+        return self._checked(self.embedder.embed(face_image))
+
+    def embed_many(self, face_images: list[np.ndarray]) -> list[np.ndarray]:
+        """정렬 얼굴 여러 개를 임베더에 한 번에 넘긴다(입력 순서 유지)."""
+        for img in face_images:
+            _check_image(img)
+        if not face_images:
+            return []
+        vecs = np.asarray(self.embedder.embed_batch(list(face_images)), dtype=np.float32)
+        if vecs.ndim != 2 or vecs.shape[0] != len(face_images):
+            raise ValueError(f"embed_batch 결과 개수 불일치: 얼굴 {len(face_images)}개, 결과 {vecs.shape}")
+        return [self._checked(v) for v in vecs]
+
+    def embed_anchor(self, face_image: np.ndarray) -> np.ndarray:
+        """학생 증명사진(등록)용 임베딩."""
+        _check_image(face_image)
+        return self._checked(self.embedder.embed_anchor(face_image))
+
     def detect(self, photo: np.ndarray) -> list[BBox]:
         """사진 한 장 → [검출 박스, ...]. 검출만 하고 정렬·인식은 하지 않는다(카메라 미리보기용)."""
         _check_image(photo)
@@ -77,14 +108,22 @@ class FaceEngine:
 
         return detect_boxes(photo, detector=self.detector)
 
-    def detect_and_embed(self, photo: np.ndarray) -> list[tuple[BBox, np.ndarray]]:
-        """사진 한 장 → [(검출 박스, 임베딩), ...]. 검출·정렬은 fd_pipeline, 그 뒤 임베딩."""
+    def _detect_and_align(self, photo: np.ndarray):
         _check_image(photo)
         # torch 를 쓰는 검출 코드는 실제로 사진을 처리할 때만 불러온다.
         from .engines.fd_pipeline import detect_and_align
 
-        boxes, images = detect_and_align(photo, detector=self.detector)
-        return [(box, self.embed(img)) for box, img in zip(boxes, images)]
+        return detect_and_align(photo, detector=self.detector)
+
+    def detect_and_embed(self, photo: np.ndarray) -> list[tuple[BBox, np.ndarray]]:
+        """사진 한 장 → [(검출 박스, 임베딩), ...]. 검출·정렬은 fd_pipeline, 그 뒤 얼굴들을 한 번에 임베딩."""
+        boxes, images = self._detect_and_align(photo)
+        return list(zip(boxes, self.embed_many(images)))
+
+    def detect_and_embed_anchor(self, photo: np.ndarray) -> list[tuple[BBox, np.ndarray]]:
+        """학생 증명사진 → [(검출 박스, 등록용 임베딩), ...]. 얼굴 개수 확인은 호출자가 한다."""
+        boxes, images = self._detect_and_align(photo)
+        return [(box, self.embed_anchor(img)) for box, img in zip(boxes, images)]
 
 
 def _check_image(image: np.ndarray) -> None:
