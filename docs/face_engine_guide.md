@@ -25,7 +25,7 @@
 | `engines/align.py` | `align_face`: 5점 → 정사각형 얼굴 / `to_xywh`: 박스 → `(x, y, w, h)` |
 | `engines/fd_pipeline.py` | `detect_and_align`: 검출 → 정렬을 이어 인식에 넘길 `(boxes, images)` 생성 / `detect_boxes`: 검출만(카메라 미리보기용) / `get_detector`: 검출기를 한 번만 로드 |
 | `engines/embedder.py` | `AdaFaceEmbedder`: 정렬 얼굴 → 512차원 임베딩(`embed`, 여러 얼굴 한 번에 `embed_batch`, 학생 등록용 여러 크기 평균 `embed_anchor`) / `to_input`·`anchor_views`: 전처리 / `get_recognizer`: 인식 모델을 한 번만 로드 |
-| `engines/adaface/` | AdaFace 백본(`net.py`, 공식 코드 그대로)과 가중치 로더(`model.py`, SHA-256 검사), `weight/` 가중치 위치 |
+| `engines/adaface/` | AdaFace 백본(`net.py`, 공식 코드 그대로)과 가중치 로더(`model.py`), `weight/` 가중치 위치 |
 | `face_engine.py` | `FaceEngine`: fd_pipeline 결과를 임베더에 넘기고 임베딩 형식 검사(출석 사진 `detect_and_embed`, 학생 증명사진 `detect_and_embed_anchor`), 검출만(`detect`, 미리보기) / 엔진 등록·선택(`FACE_ENGINE`) |
 
 - 얼굴 엔진은 **DB를 읽지 않습니다.** 사진을 받아 얼굴 임베딩 목록을 돌려주는 일만 합니다.
@@ -108,7 +108,7 @@ register_engine("retinaface", _make_retinaface)
 | 색 순서 | **RGB 그대로** (BGR 변환 없음) |
 | 정규화 | `pixel / 127.5 - 1` (로더 `encode_rgb` 안에서 함) |
 | 출력 | 512차원, L2 정규화 (모델 출력 길이가 1이 아니면 오류) |
-| 가중치 검사 | 불러올 때 SHA-256을 확인하고, 다른 파일이면 오류 |
+| 가중치 읽기 | checkpoint의 `model_state_dict`만 읽음 (`weights_only=True`, pickle 안 코드는 실행하지 않음) |
 
 - 전처리는 FR 쪽 실사용 코드(FR_draft `fr_draft/attendance.py`의 `model_input`, `anchor_views`)와 같습니다. FR이 임계값 0.109를 정할 때 쓴 전처리와 맞추기 위함입니다.
 - 크롭은 ArcFace 5점 정렬이 아니라 CelebA-HQ 방식(머리카락까지 들어가는 넉넉한 크롭, FR 요청)을 그대로 112로 맞춥니다.

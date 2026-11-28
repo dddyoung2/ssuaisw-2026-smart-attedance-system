@@ -142,7 +142,7 @@ gh release download det-v1.0.0 -p Resnet50_Final.pth -D src/backend/engines/reti
 gh release download AdaFace_weights_v1.0.0 -p adaface_weight_fined.pt -O src/backend/engines/adaface/weight/adaface_weight.pt
 ```
 
-AdaFace 가중치는 파인튜닝 가중치이며, 불러올 때 SHA-256을 확인합니다. 다른 파일이면 오류가 납니다.
+AdaFace 가중치는 파인튜닝 가중치이며, 불러올 때 `model_state_dict`만 읽습니다.
 
 ---
 
